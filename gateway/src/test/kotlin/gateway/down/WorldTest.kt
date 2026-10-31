@@ -10,6 +10,7 @@ import net.rsprot.protocol.game.outgoing.misc.client.HintArrow
 import net.rsprot.protocol.game.outgoing.sound.SynthSound
 import net.rsprot.protocol.game.outgoing.specific.ProjAnimSpecificV4
 import net.rsprot.protocol.game.outgoing.misc.client.SetInteractionMode
+import net.rsprot.protocol.game.outgoing.specific.LocAnimSpecific
 import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialEnclosed
 import net.rsprot.protocol.message.OutgoingGameMessage
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -49,6 +50,23 @@ class WorldTest {
         boats.flushDeck(WORLD)
         val zone = sent.single() as UpdateZonePartialEnclosed
         assertEquals(Triple(0, 0, 1), Triple(zone.zoneX, zone.zoneZ, zone.level))
+    }
+
+    @Test
+    fun `a deck loc's animation (sails, helm) goes to the boat's world, a root one straight out`() {
+        val deck = WorldEntities.Deck(BOAT, WORLD, 1, 1, 1, DECK_ZONE, DECK_ZONE, arrayOfNulls(4 * 13 * 13))
+        val boats = World({ sent += it }, deckAt = { x, z -> deck.takeIf { it.contains(x, z) } }).apply { rebuild(LUMBRIDGE_ZONE_X, LUMBRIDGE_ZONE_Z) }
+        // SailingContent.animateDeckLoc's LOC_ANIM: u16 loc, x, z, u8 level, shape << 2 | rotation, u16 anim.
+        boats.handle(packet(TspsServerPacket.LOC_ANIM, TspsWriter().u16(DOOR).u16((DECK_ZONE shl 3) + 3).u16((DECK_ZONE shl 3) + 5).u8(1).u8(10 shl 2).u16(ANIM)))
+        boats.flushZones()
+        assertTrue(sent.isEmpty(), "not in the main world")
+        boats.flushDeck(WORLD)
+        val zone = sent.removeAt(0) as UpdateZonePartialEnclosed
+        assertEquals(Triple(0, 0, 1), Triple(zone.zoneX, zone.zoneZ, zone.level))
+        assertTrue(zone.payload.readableBytes() > 0)
+
+        boats.handle(packet(TspsServerPacket.LOC_ANIM, TspsWriter().u16(DOOR).u16(3222).u16(3218).u8(0).u8(0).u16(ANIM)))
+        assertEquals(ANIM, (sent.single() as LocAnimSpecific).id)
     }
 
     @Test
@@ -104,6 +122,7 @@ class WorldTest {
         const val LUMBRIDGE_ZONE_X = 3222 shr 3
         const val LUMBRIDGE_ZONE_Z = 3218 shr 3
         const val DOOR = 1543
+        const val ANIM = 9105
         const val SOUND = 2739
         const val NPC_INDEX = 42
         const val PLAYER_INDEX = 7

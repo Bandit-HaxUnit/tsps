@@ -39,6 +39,7 @@ import net.rsprot.protocol.message.IncomingGameMessage
 import net.rsprot.protocol.message.OutgoingGameMessage
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -122,24 +123,32 @@ class GatewaySession(
         }
         val address = channel.remoteAddress().toString().substringAfter('/').substringBeforeLast(':')
         TspsSocket.connect(context.config.tspsUrl, address, this).whenComplete { socket, error ->
-            // The client left while tsps answered.
-            if (executor.isShutdown) socket?.close()
-            run {
-                if (error != null) {
-                    log.warning("${block.username}: ${error.message}")
-                    fail(LoginResponse.LoginServerOffline)
-                    return@run
+            val queued =
+                run {
+                    // The client left first (its close may be queued ahead of this): close() never
+                    // saw this socket, and logging in on it would hold the account in tsps.
+                    if (state == State.CLOSED) {
+                        socket?.close()
+                        return@run
+                    }
+                    if (error != null) {
+                        log.warning("${block.username}: ${error.message}")
+                        fail(LoginResponse.LoginServerOffline)
+                        return@run
+                    }
+                    tsps = socket
+                    state = State.LOGGING_IN
+                    tsps.send(TspsClientPacket.login(block.username, password, context.revision))
                 }
-                tsps = socket
-                state = State.LOGGING_IN
-                tsps.send(TspsClientPacket.login(block.username, password, context.revision))
-            }
+            if (!queued) socket?.close()
         }
     }
 
-    override fun onPackets(packets: List<TspsPacket>) = run { packets.forEach(::onTspsPacket) }
+    override fun onPackets(packets: List<TspsPacket>) {
+        run { packets.forEach(::onTspsPacket) }
+    }
 
-    override fun onClosed(reason: String) =
+    override fun onClosed(reason: String) {
         run {
             log.info("${block.username}: $reason")
             when (state) {
@@ -148,6 +157,7 @@ class GatewaySession(
                 else -> fail(LoginResponse.LoginServerOffline)
             }
         }
+    }
 
     /** A decoded client packet, from [Session.processIncomingPackets] on this session's thread. */
     fun onClientMessage(message: IncomingGameMessage) = upstream.handle(message)
@@ -412,18 +422,25 @@ class GatewaySession(
 
     /**
      * Runs [task] on this session's thread. A failure is logged and ends the session: its
-     * mirrors of tsps's state can't be trusted after a message was only half applied.
+     * mirrors of tsps's state can't be trusted after a message was only half applied. Returns
+     * false when the session has ended and [task] won't run.
      */
-    private fun run(task: () -> Unit) {
-        if (executor.isShutdown) return
-        executor.execute {
-            try {
-                task()
-            } catch (e: Throwable) {
-                log.log(Level.SEVERE, "${block.username}: session failed", e)
-                if (state == State.IN_GAME) close() else fail(LoginResponse.UnknownReplyFromLoginServer)
+    private fun run(task: () -> Unit): Boolean {
+        if (executor.isShutdown) return false
+        try {
+            executor.execute {
+                try {
+                    task()
+                } catch (e: Throwable) {
+                    log.log(Level.SEVERE, "${block.username}: session failed", e)
+                    if (state == State.IN_GAME) close() else fail(LoginResponse.UnknownReplyFromLoginServer)
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            // Shut down between the check and the hand-off.
+            return false
         }
+        return true
     }
 
     private fun close() {

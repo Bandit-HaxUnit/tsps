@@ -29,6 +29,7 @@ import net.rsprot.protocol.common.client.OldSchoolClientType
 import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialEnclosed
 import net.rsprot.protocol.message.ZoneProt
 import net.rsprot.protocol.game.outgoing.zone.payload.LocAddChangeV2
+import net.rsprot.protocol.game.outgoing.zone.payload.LocAnim
 import net.rsprot.protocol.game.outgoing.zone.payload.LocDel
 import net.rsprot.protocol.game.outgoing.zone.payload.SoundArea
 import net.rsprot.protocol.message.OutgoingGameMessage
@@ -112,10 +113,14 @@ class World(
                 reader.u16() // loc id: the client animates whatever is on the tile
                 val x = reader.u16()
                 val z = reader.u16()
-                reader.u8()
+                val level = reader.u8()
                 val shapeRotation = reader.u8()
                 val anim = reader.u16()
-                if (inScene(x, z)) send(LocAnimSpecific(anim, x - sceneX, z - sceneZ, shapeRotation ushr 2, shapeRotation and 3))
+                when {
+                    // A boat's sails and helm: in that boat's world, as its locs are.
+                    deckAt(x, z) != null -> zone(x, z, level, LocAnim(anim, x and 7, z and 7, shapeRotation ushr 2, shapeRotation and 3))
+                    inScene(x, z) -> send(LocAnimSpecific(anim, x - sceneX, z - sceneZ, shapeRotation ushr 2, shapeRotation and 3))
+                }
             }
             TspsServerPacket.SPOT_ANIM -> {
                 val id = reader.u16()
