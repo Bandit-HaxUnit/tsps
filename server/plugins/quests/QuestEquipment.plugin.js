@@ -1,0 +1,79 @@
+/**
+ * Equipment that needs a quest finished before it can be worn or wielded: rune platebody
+ * (Dragon Slayer I), dragon scimitar (Monkey Madness I), dragon longsword (Lost City) and the
+ * rest in ./data/quest-equipment.json, from the OSRS Wiki.
+ *
+ * The refusal is live OSRS's two lines (rsprox captures 3276 and 1768): "You have not earned
+ * the right to wear this yet." ("wield" for an item whose option is Wield), then "You need to
+ * complete the <quest> quest first."
+ *
+ * Not gated:
+ *  - worlds with PvpMode on, where presets hand out this gear and players swap it by hand;
+ *  - player bots, which gear up from loadouts rather than quests;
+ *  - a quest this server doesn't have, so the item never becomes unwearable.
+ */
+const DATA = require("./data/quest-equipment.json");
+
+let pluginApi;
+/** Item id -> { quest, message } once built from the data file. */
+let requirementByItem = null;
+
+function requirements() {
+  if (requirementByItem) return requirementByItem;
+  const { ItemIdentifiers } = pluginApi.core;
+  requirementByItem = new Map();
+  for (const entry of DATA.quests) {
+    for (const name of entry.items) {
+      const id = ItemIdentifiers[name];
+      if (typeof id !== "number") throw new Error(`quest-equipment.json: unknown item ${name}`);
+      requirementByItem.set(id, entry);
+    }
+  }
+  return requirementByItem;
+}
+
+function pvpModeEnabled() {
+  const request = { enabled: false };
+  pluginApi.emitCustomEvent("pvp-mode:is-enabled", request);
+  return request.enabled === true;
+}
+
+/** True when the quest is done, or when this server has no such quest to do. */
+function questComplete(player, quest) {
+  const request = { player, name: quest, complete: null };
+  pluginApi.emitCustomEvent("quest:is-complete", request);
+  return request.complete !== false;
+}
+
+function verbFor(itemId) {
+  const actions = pluginApi.core.CacheDefinitions.getItem(itemId)?.inventoryActions ?? [];
+  return actions.includes("Wield") ? "wield" : "wear";
+}
+
+function refuse(player, itemId, entry) {
+  if (entry.message) {
+    player.sendMessage(entry.message);
+    return;
+  }
+  player.sendMessage(`You have not earned the right to ${verbFor(itemId)} this yet.`);
+  player.sendMessage(`You need to complete the ${entry.quest} quest first.`);
+}
+
+function canEquip(event) {
+  const { player, item } = event;
+  const itemId = item?.getId?.();
+  const entry = requirements().get(itemId);
+  if (!entry || player.isPlayerBot?.() || pvpModeEnabled()) return;
+  if (questComplete(player, entry.quest)) return;
+  event.allow = false;
+  refuse(player, itemId, entry);
+}
+
+module.exports = {
+  name: "QuestEquipment",
+  register(api) {
+    pluginApi = api;
+    api.onCanEquip(canEquip);
+  },
+  _test: { canEquip, requirements },
+};
