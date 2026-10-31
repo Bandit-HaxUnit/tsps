@@ -51,14 +51,6 @@ module.exports = function registerEnterTheAbyssQuest(api) {
 
   // The cache's quest row is "Enter the Abyss"; Rune Mysteries is quest 125.
   const RUNE_MYSTERIES_KEY = "rune_mysteries";
-  // Other quests that use the same Mage of Zamorak NPCs. Their windows must win
-  // while Enter the Abyss is still in progress (Temple of the Eye already
-  // requires this miniquest; Wanted uses him for its fur/mage deal).
-  const TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE = "quest.temple_of_the_eye.stage";
-  const TEMPLE_OF_THE_EYE_FIRST_MAGE_STAGE = 5;
-  const WANTED_STAGE_ATTRIBUTE = "quest.wanted.stage";
-  const WANTED_FIRST_MAGE_STAGE = 8;
-  const WANTED_LAST_MAGE_STAGE = 9;
 
   // Cache NPCs: 2580/2581 and the spawned 3228 are the Wilderness mage;
   // 2582 and the spawned 3229 are the Chaos Temple mage. 7425 is the unrelated
@@ -72,6 +64,11 @@ module.exports = function registerEnterTheAbyssQuest(api) {
     Npcs.MAGE_OF_ZAMORAK_3, // 2582
     3229,
   ]);
+  // Temple of the Eye spawns its own private 2580 at the chapel; the same cache
+  // id as the Wilderness mage, so the tiles distinguish the two.
+  const WILDERNESS_MAGE_TILE = { x: 3106, y: 3558 };
+  const CHAPEL_MAGE_TILE = { x: 3260, y: 3383 };
+  const MAGE_TILE_RADIUS = 8;
 
   // Varbit ids are the cache's rcu_essencespot_* bits (varp 491).
   const ESSENCE_SPOTS = [
@@ -101,14 +98,6 @@ module.exports = function registerEnterTheAbyssQuest(api) {
     return request.complete === true;
   }
 
-  /** Temple of the Eye and Wanted own the shared mage inside their own stage windows. */
-  function anotherQuestOwnsMage(player) {
-    const temple = Number(player.getAttribute(TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE)) || 0;
-    if (temple >= TEMPLE_OF_THE_EYE_FIRST_MAGE_STAGE) return true;
-    const wanted = Number(player.getAttribute(WANTED_STAGE_ATTRIBUTE)) || 0;
-    return wanted >= WANTED_FIRST_MAGE_STAGE && wanted <= WANTED_LAST_MAGE_STAGE;
-  }
-
   function coord(location) {
     if (!location) return null;
     const x = typeof location.getX === "function" ? location.getX() : location.x;
@@ -119,6 +108,16 @@ module.exports = function registerEnterTheAbyssQuest(api) {
   function near(location, point, radius) {
     const at = coord(location);
     return at !== null && Math.abs(at.x - point.x) <= radius && Math.abs(at.y - point.y) <= radius;
+  }
+
+  /** `varrock` or `wilderness` for a Mage of Zamorak, by where the NPC stands. */
+  function mageKind(event) {
+    const at = event?.npc?.getLocation?.() ?? event?.player?.getLocation?.() ?? null;
+    if (near(at, CHAPEL_MAGE_TILE, MAGE_TILE_RADIUS)) return "varrock";
+    if (near(at, WILDERNESS_MAGE_TILE, MAGE_TILE_RADIUS)) return "wilderness";
+    if (VARROCK_MAGE_IDS.has(event?.npcId)) return "varrock";
+    if (WILDERNESS_MAGE_IDS.has(event?.npcId)) return "wilderness";
+    return null;
   }
 
   function readings(player) {
@@ -192,33 +191,27 @@ module.exports = function registerEnterTheAbyssQuest(api) {
   }
 
   /** Turns the carried empty orb into the charged one, in the same slot. */
-  function chargeOrb(player, quiet = false) {
+  function chargeOrb(player) {
     const items = inventory(player).getItems();
     const slot = items.findIndex((item) => item?.getId?.() === ORB_EMPTY);
     if (slot < 0) return false;
     inventory(player).setItem(slot, new Item(ORB_FULL, 1));
-    if (!quiet) player.sendMessage("The scrying orb absorbs the magic of the teleport.");
     return true;
   }
 
   function recordReading(player, spot) {
     const current = readings(player);
-    if (!current.includes(spot.key)) {
-      player.setAttribute(READINGS_ATTRIBUTE, [...current, spot.key]);
-    }
+    if (current.includes(spot.key)) return;
+    const next = [...current, spot.key];
+    player.setAttribute(READINGS_ATTRIBUTE, next);
     player.getPacketSender().sendVarbit(spot.varbit, 1);
-    const total = current.includes(spot.key) ? current.length : current.length + 1;
-    if (total >= 3) {
+    if (next.length >= 3) {
       if (quest.getStage(player) < STAGE_READY) quest.setStage(player, STAGE_READY);
-      chargeOrb(player, true);
-      player.sendMessage("The scrying orb absorbs the magic of the teleport.");
-    } else {
-      player.sendMessage("The scrying orb absorbs the magic of the teleport.");
+      chargeOrb(player);
     }
   }
 
   function acceptOffer(player) {
-    player.setAttribute(OFFER_MADE_ATTRIBUTE, 1);
     if (owns(player, ORB_EMPTY) || owns(player, ORB_FULL)) {
       if (quest.getStage(player) < STAGE_COLLECTING) quest.setStage(player, STAGE_COLLECTING);
       return;
@@ -283,6 +276,7 @@ module.exports = function registerEnterTheAbyssQuest(api) {
   };
 
   const AGREEMENT = [
+    { exec: (player) => player.setAttribute(OFFER_MADE_ATTRIBUTE, 1) },
     { npc: ["Alright, if you help us access the Rune Essence Mine, we will share our runecrafting secrets with you in return."] },
     DEAL_CHOICES,
   ];
@@ -424,7 +418,9 @@ module.exports = function registerEnterTheAbyssQuest(api) {
     },
     {
       exec: (player) => {
-        if (inventory(player).deleteNumber(ORB_FULL, 1)) quest.complete(player);
+        if (!has(player, ORB_FULL)) return;
+        inventory(player).deleteNumber(ORB_FULL, 1);
+        quest.complete(player);
       },
     },
   ];
@@ -489,7 +485,6 @@ module.exports = function registerEnterTheAbyssQuest(api) {
       if (player.getAttribute(OFFER_MADE_ATTRIBUTE)) {
         startDialogue(api, player, { npcId }, SHORT_OFFER);
       } else {
-        player.setAttribute(OFFER_MADE_ATTRIBUTE, 1);
         startDialogue(api, player, { npcId }, VARROCK_INTRO);
       }
       return true;
@@ -537,7 +532,7 @@ module.exports = function registerEnterTheAbyssQuest(api) {
     }
 
     if (stage === STAGE_READY) {
-      if (has(player, ORB_EMPTY) && readingCount(player) >= 3) chargeOrb(player, true);
+      if (has(player, ORB_EMPTY) && readingCount(player) >= 3) chargeOrb(player);
       if (has(player, ORB_FULL)) {
         startDialogue(api, player, { npcId }, HAND_IN);
         return true;
@@ -590,19 +585,17 @@ module.exports = function registerEnterTheAbyssQuest(api) {
 
   function talkToMage(event) {
     const { player, npcId } = event;
-    if (!WILDERNESS_MAGE_IDS.has(npcId) && !VARROCK_MAGE_IDS.has(npcId)) return false;
-    // A completed miniquest may still claim a pending reward; progression yields.
-    if (!quest.isComplete(player) && anotherQuestOwnsMage(player)) return false;
-    if (WILDERNESS_MAGE_IDS.has(npcId)) return talkWildernessMage(player, npcId);
-    if (VARROCK_MAGE_IDS.has(npcId)) return talkVarrockMage(player, npcId);
+    const kind = mageKind(event);
+    if (kind === "wilderness") return talkWildernessMage(player, npcId);
+    if (kind === "varrock") return talkVarrockMage(player, npcId);
     return false;
   }
 
   // The generic picker takes the first "standard" variant for every Mage of
   // Zamorak, which is the Wilderness page. The Chaos Temple mage needs the
   // post-miniquest branch once there is nothing left for this plugin to say.
-  function selectVariant({ npcId, player }) {
-    if (VARROCK_MAGE_IDS.has(npcId) && quest.isComplete(player)) {
+  function selectVariant({ npcId, player, npc }) {
+    if (quest.isComplete(player) && mageKind({ npcId, player, npc }) === "varrock") {
       return { page: "Mage of Zamorak", variant: "standard-dialogue-after-completing-enter-the-abyss" };
     }
     return null;
@@ -626,7 +619,7 @@ module.exports = function registerEnterTheAbyssQuest(api) {
     }
     if (quest.getStage(player) === STAGE_COLLECTING && readingCount(player) >= 3) {
       quest.setStage(player, STAGE_READY);
-      chargeOrb(player, true);
+      chargeOrb(player);
     }
   }
 

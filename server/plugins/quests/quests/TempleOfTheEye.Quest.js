@@ -51,11 +51,11 @@
  * the cache dumps and the npc/item/object identifier files.
  *
  * Gaps / approximations:
- * - Enter the Abyss has no implementation on this server; the wiki "has not
- *   completed Enter the Abyss" condition is answered with Rune Mysteries
- *   completion (which Enter the Abyss itself requires), so the quest starts once
- *   Rune Mysteries is complete. The 10 Runecrafting requirement is enforced
- *   through the transcript's own condition (unboosted level).
+ * - Enter the Abyss is a real prerequisite. The Mage of Zamorak is left to that
+ *   miniquest until it is complete, so legacy saves that started or finished
+ *   Temple of the Eye before Enter the Abyss existed can still complete it.
+ *   The 10 Runecrafting requirement is enforced through the transcript's own
+ *   condition (unboosted level).
  * - The Guardians of the Rift minigame is not implemented; the quest only uses
  *   the temple lobby map that is in the cache. "Access to the minigame" is the
  *   portal in the Wizards' Tower basement and the temple map.
@@ -402,8 +402,6 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const FELIX_BIT = 2;
   const TAMARA_BIT = 4;
 
-  const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
-  const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
   const RUNECRAFTING_REQUIREMENT = 10;
 
   // Per-player quest spawns (owner-only), keyed by player.
@@ -586,10 +584,9 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     return request.complete === true;
   }
 
-  /** Enter the Abyss is not implemented; Rune Mysteries is its prerequisite, so its
-   * completion stands in for it (see the header). */
+  /** The real prerequisite: Enter the Abyss (which itself requires Rune Mysteries). */
   function hasAbyssAccess(player) {
-    return attributeNumber(player, RUNE_MYSTERIES_STAGE_ATTRIBUTE) >= RUNE_MYSTERIES_COMPLETE_STAGE;
+    return isQuestComplete(player, "enter_the_abyss");
   }
 
   function teaState(player) {
@@ -1151,7 +1148,10 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     ) {
       return selectPerstenVariant(player, npcId);
     }
-    if (MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) return selectMageVariant(player);
+    if (MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) {
+      if (!isQuestComplete(player, "enter_the_abyss")) return null;
+      return selectMageVariant(player);
+    }
     if (npcId === TEA_SELLER_NPC_ID) return selectTeaSellerVariant(player);
     if (npcId === DARK_MAGE_NPC_ID) return selectDarkMageVariant(player);
     if (SEDRIDOR_NPC_IDS.has(npcId)) return selectSedridorVariant(player);
@@ -1614,6 +1614,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     const npcId = event.npcId ?? event.target?.getId?.();
     if (!player || npcId === undefined || npcId === null) return;
     if (itemId === EYE_AMULET_ITEM_ID && MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) {
+      if (!isQuestComplete(player, "enter_the_abyss")) return;
       if (stageOf(player) < STAGE_STARTED || stageOf(player) >= STAGE_TEA_GIVEN) return;
       const variant = selectMageVariant(player);
       if (!variant) return;
@@ -2112,6 +2113,9 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     const { player } = event;
     const npcId = eventNpcId(event);
     if (!player || !MAGE_OF_ZAMORAK_NPC_IDS.has(npcId)) return false;
+    // Legacy saves can have started (or finished) this quest before Enter the
+    // Abyss existed. Leave the shared mage to that miniquest until it is done.
+    if (!isQuestComplete(player, "enter_the_abyss")) return false;
     recoverQuestItems(player);
     return beginNamedTalk(event, npcId, selectMageVariant(player));
   }

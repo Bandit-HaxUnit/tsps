@@ -318,11 +318,11 @@ function play(player, steps, choices = []) {
   }
 }
 
-function talk(player, npcId) {
+function talk(player, npcId, npc = null) {
   const actions = hooks.npc.get("Mage of Zamorak");
   assert.ok(actions && typeof actions["Talk-to"] === "function", "the quest owns Mage of Zamorak Talk-to");
   const before = lastDialogue;
-  const handled = actions["Talk-to"]({ player, npcId });
+  const handled = actions["Talk-to"]({ player, npcId, npc });
   return { handled, steps: lastDialogue !== before ? lastDialogue.steps : null };
 }
 
@@ -480,8 +480,18 @@ test("Enter the Abyss follows the helper route and its recovery paths", () => {
     quest.setStage(thinking, 1);
     play(thinking, talk(thinking, VARROCK_MAGE).steps, ["Interesting. Thanks for the information."]);
     assert.equal(quest.getStage(thinking), 1, "walking away leaves the offer open");
-    play(thinking, talk(thinking, VARROCK_MAGE).steps, ["I need to think about it."]);
+    assert.equal(thinking.getAttribute("enter-the-abyss:offer-made"), undefined, "no offer was made yet");
+    const secondIntro = talk(thinking, VARROCK_MAGE).steps;
+    assert.match(JSON.stringify(secondIntro), /Ah, you again\. The Wilderness/, "an early exit repeats the full intro");
+    play(thinking, secondIntro, [
+      "Where do you get your runes from?",
+      "Care to share?",
+      "Maybe I could make it worth your while?",
+      "Yes, but I can still help you as well.",
+      "I need to think about it.",
+    ]);
     assert.equal(quest.getStage(thinking), 1, "thinking about it leaves the offer open");
+    assert.equal(thinking.getAttribute("enter-the-abyss:offer-made"), 1, "the agreement marks the offer as made");
     play(thinking, talk(thinking, VARROCK_MAGE).steps, ["Deal."]);
     assert.equal(quest.getStage(thinking), 2, "accepting on a later visit starts the orb hunt");
     assert.equal(thinking.__inventory.getAmount(ORB_EMPTY), 1);
@@ -509,6 +519,16 @@ test("Enter the Abyss follows the helper route and its recovery paths", () => {
     assert.equal(quest.getStage(banked), 3, "the orb must be brought, not banked");
     assert.ok(banked.__lines.some((line) => line.includes("no use there")));
 
+    // ---- The hand-in cannot complete without the orb -----------------------
+    const orbGone = makePlayer();
+    quest.setStage(orbGone, 3);
+    orbGone.__inventory.adds(ORB_FULL, 1);
+    const orbGoneSteps = talk(orbGone, VARROCK_MAGE).steps;
+    orbGone.__inventory.deleteNumber(ORB_FULL, 1);
+    play(orbGone, orbGoneSteps);
+    assert.equal(quest.getStage(orbGone), 3, "losing the orb before the last line does not complete the quest");
+    assert.equal(orbGone.__experience.get("Runecrafting"), undefined);
+
     // ---- Full inventory keeps the second reward for later -----------------
     const full = makePlayer();
     quest.setStage(full, 3);
@@ -534,16 +554,28 @@ test("Enter the Abyss follows the helper route and its recovery paths", () => {
     play(godly, refusal.steps);
     assert.ok(godly.__lines.some((line) => line.includes("disrespectful attire")));
 
-    // ---- Other quests keep their own Mage of Zamorak windows -------------
-    const templePlayer = makePlayer();
-    quest.setStage(templePlayer, 1);
-    templePlayer.setAttribute("quest.temple_of_the_eye.stage", 5);
-    assert.equal(talk(templePlayer, VARROCK_MAGE).handled, false, "Temple of the Eye owns the mage");
+    // ---- The chapel copy of the Wilderness mage id is routed by tile ------
+    const chapelMage = makePlayer();
+    chapelMage.__equipment.push(coreItem(2412, 1)); // Saradomin cape
+    const chapelTalk = talk(chapelMage, 2580, { getLocation: () => ({ x: 3259, y: 3383 }) });
+    assert.equal(chapelTalk.handled, true);
+    play(chapelMage, chapelTalk.steps);
+    assert.ok(
+      chapelMage.__lines.some((line) => line.includes("disrespectful attire")),
+      "the chapel 2580 uses the Varrock refusal"
+    );
 
-    const wantedPlayer = makePlayer();
-    quest.setStage(wantedPlayer, 1);
-    wantedPlayer.setAttribute("quest.wanted.stage", 8);
-    assert.equal(talk(wantedPlayer, WILDERNESS_MAGE).handled, false, "Wanted owns the Wilderness mage");
+    const wildMage = makePlayer();
+    wildMage.__equipment.push(coreItem(2412, 1));
+    const wildTalk = talk(wildMage, 2580, { getLocation: () => ({ x: 3106, y: 3558 }) });
+    play(wildMage, wildTalk.steps);
+    assert.ok(
+      wildMage.__lines.some((line) => line.includes("Saradominist filth")),
+      "the Wilderness 2580 uses the Wilderness refusal"
+    );
+
+    // The Ourania mage is unrelated.
+    assert.equal(talk(makePlayer(), 7425).handled, false, "the Ourania mage is not claimed");
 
     // ---- Reading the rewarded book ---------------------------------------
     const reader = makePlayer();
@@ -581,5 +613,43 @@ test("Enter the Abyss follows the helper route and its recovery paths", () => {
   } finally {
     runtime.startDialogue = realStartDialogue;
     runtime.openBook = realOpenBook;
+  }
+});
+
+test("Temple of the Eye yields the shared mage to an incomplete Enter the Abyss", () => {
+  const realStartTranscript = runtime.startTranscript;
+  let transcript = null;
+  runtime.startTranscript = (api, player, npcId, page, variant) => {
+    transcript = { player, npcId, page, variant };
+    return true;
+  };
+  try {
+    if (!quest) quest = runtime.getRegisteredQuests().find((entry) => entry.key === "enter_the_abyss");
+    assert.ok(quest, "Enter the Abyss is registered");
+    const toteApi = createApi();
+    require("../plugins/quests/quests/TempleOfTheEye.Quest.js")(toteApi.api);
+    const handler = toteApi.npc.get("Mage of Zamorak")?.["Talk-to"];
+    assert.equal(typeof handler, "function", "Temple of the Eye owns a Mage of Zamorak Talk-to");
+
+    const legacy = makePlayer();
+    legacy.setAttribute("quest.temple_of_the_eye.stage", 5);
+    assert.equal(
+      handler({ player: legacy, npcId: 2580, npc: { getLocation: () => ({ x: 3259, y: 3383 }) } }),
+      false,
+      "a legacy Temple of the Eye save leaves the mage to Enter the Abyss"
+    );
+
+    const unlocked = makePlayer();
+    quest.setStage(unlocked, 4);
+    unlocked.setAttribute("quest.temple_of_the_eye.stage", 5);
+    assert.notEqual(
+      handler({ player: unlocked, npcId: 2580, npc: { getLocation: () => ({ x: 3259, y: 3383 }) } }),
+      false,
+      "Temple of the Eye keeps the mage after Enter the Abyss is complete"
+    );
+    assert.equal(transcript?.page, "Temple of the Eye");
+    assert.match(String(transcript?.variant), /mage-of-zamorak/);
+  } finally {
+    runtime.startTranscript = realStartTranscript;
   }
 });
