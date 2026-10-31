@@ -443,6 +443,17 @@
     "native": false
   },
   {
+    "questKey": "bear_your_soul",
+    "sourceKey": "BearYourSoul",
+    "variants": [
+      {
+        "helperVariant": "BEAR_YOUR_SOUL",
+        "helperClass": "com.questhelper.helpers.quests.bearyoursoul.BearYourSoul"
+      }
+    ],
+    "native": false
+  },
+  {
     "questKey": "desert_treasure_i",
     "sourceKey": "DesertTreasureI",
     "variants": [

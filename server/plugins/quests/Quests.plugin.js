@@ -21,7 +21,9 @@ const QUESTS = [
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
-  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DesertTreasureII",
+  // BearYourSoul also searches the Arceuus Library shelves; DepthsOfDespair's active
+  // book step must claim that shared search first.
+  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "BearYourSoul", "DesertTreasureI", "DesertTreasureII",
   "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",
