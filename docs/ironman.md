@@ -50,14 +50,22 @@ Each rule comes from the rsprox capture database (https://rsprox.net/database) o
 | Shops sell only their own stock, never what players sold to them (Wiki) | all | "As an Ironman, you can only buy the shop's own stock." *(ours)* |
 | No Grand Exchange (Wiki) | all | "As an Ironman, you cannot use the Grand Exchange." *(ours)* |
 | No presets: this server's PvP loadouts hand out items. Covers `::presets`, the interface, and the automatic opening after a death, which is skipped quietly | all | "As an Ironman, you cannot use presets." *(ours)* |
+| No staking in the Duel Arena; a free duel is still allowed (Wiki: Ironmen can't stake) | all | "As an Ironman, you cannot take part in a staked duel." *(ours)* |
 | No bank (the Ironman tutor, captured) | Ultimate | "As an Ultimate Ironman, you cannot use the bank." *(ours)* |
 | All items dropped on death, none kept (the Ironman tutor, captured) | Ultimate | none |
 | One life: a dangerous death makes them a standard Ironman; a safe death (a minigame) doesn't | Hardcore | "You have fallen as a Hardcore Ironman. You are now a standard Ironman." *(ours)* |
 
+**Item-on-player:** the only hand-off that actually moves an item into the target's inventory
+is a bond (`Bonds.plugin.js`), and the Wiki lets Ironmen give and receive bonds; Shield of
+Arrav's half certificates are the other hand-off the Wiki exempts. Both are left alone, and no
+other item-on-player route transfers an item (Castle Wars bandages and Hunter butterflies aid,
+they don't give one), so there is nothing else to refuse.
+
 ## How it hooks in
 
 Existing hooks:
-- `onTradeRequest`
+- `onTradeRequest` (the trade request) and `onCanTrade` (the trade window itself, so a mode
+  set mid-trade or a trade started directly still closes)
 - `onGroundItemPickup`
 - `onCanAttack`
 - `onPlayerDeathItemDrop`
@@ -72,6 +80,8 @@ Generic additions for these rules:
 - **Presets** ask `presets:can-use` `{ player, allow, message }` before opening or applying one.
 - **`ShopManager`** asks `shop:buy-limit` `{ player, shopId, itemId, available, original, limit, message }` before a purchase.
 - **The Grand Exchange** asks `grand-exchange:can-open` `{ player, allow, message }` before opening.
+- **The Duel Arena** asks `duelarena:can-stake` `{ player, session, allow, message }` before an
+  item is offered and before a staked duel is accepted.
 
 ## Not done yet
 

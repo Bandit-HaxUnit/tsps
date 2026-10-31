@@ -79,6 +79,34 @@ test("no trading either way, with the captured lines", () => {
   assert.equal(mains.handled, false, "two normal accounts trade as before");
 });
 
+test("onCanTrade refuses the window itself, whichever side is the Ironman", () => {
+  const iron = account("iron", "ironman");
+  const main = account("main");
+  const fromIron = { player: iron, target: main, allow: null };
+  hooks.onCanTrade(fromIron);
+  assert.deepEqual([fromIron.allow, iron.messages], [false, ["You are an Ironman. You stand alone."]]);
+  const toIron = { player: main, target: iron, allow: null };
+  hooks.onCanTrade(toIron);
+  assert.deepEqual([toIron.allow, main.messages], [false, ["iron is an Ironman. He stands alone."]]);
+  const mains = { player: main, target: account("other"), allow: null };
+  hooks.onCanTrade(mains);
+  assert.equal(mains.allow, null, "two normal accounts can still trade");
+});
+
+test("an Ironman can't stake in the Duel Arena; a free duel is fine", () => {
+  for (const mode of ["ironman", "ultimate", "hardcore"]) {
+    const player = account(`staker-${mode}`, mode);
+    const request = { player, allow: true, message: null };
+    custom["duelarena:can-stake"](request);
+    assert.deepEqual([request.allow, request.message],
+      [false, "As an Ironman, you cannot take part in a staked duel."]);
+    assert.deepEqual(player.messages, [], "the Duel Arena shows the request's message");
+  }
+  const main = { player: account("main"), allow: true, message: null };
+  custom["duelarena:can-stake"](main);
+  assert.equal(main.allow, true);
+});
+
 test("an Ironman can't pick up other players' items; their own and world spawns are fine", () => {
   const iron = account("iron", "ironman");
   const pick = (owner) => {
