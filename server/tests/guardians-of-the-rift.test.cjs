@@ -1344,8 +1344,14 @@ test('a search that would not fit gives nothing and keeps its points', () => {
   const player = fakePlayer();
   Records.setPoints(player, 3, 3);
   for (let i = 0; i < 28; i++) player.inventory.slots[i] = { id: 1, amount: 1 };
-  rift(player, 'Search');
-  ticks(5);
+  const random = Math.random;
+  Math.random = () => 0; // a rare/main roll that needs slot(s), never the slotless pearl roll
+  try {
+    rift(player, 'Search');
+    ticks(5);
+  } finally {
+    Math.random = random;
+  }
   assert.deepEqual(Records.points(player), { elemental: 3, catalytic: 3 });
   assert.ok(!player.messages.some((message) => message.startsWith('You found some loot')));
 });
