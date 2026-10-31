@@ -22,6 +22,13 @@
  *   9  reported to King Narnode - quest complete
  *   10 post-quest Daero training claimed
  *
+ * These are saved stages. The wire value of mm_main (varpValue) follows the
+ * live scale Quest Helper keys on: 1-2 chapter 1, 3 chapter 2 (on Ape Atoll),
+ * 4 chapter 3 (greegree made), 5 once Awowogei has the monkey, 6 once the
+ * Jungle Demon is dead, then 9 complete and 10 trained. Saved stage 1 and 2
+ * keep their value; 3-6 send 2 (where live mm_main moves to 2 inside chapter
+ * 1 is not recorded).
+ *
  * Stage evidence: cache dbTable 0 row 95 ("Monkey Madness I") column 19 stores 9,
  * the same column Cold War reads its completion 135 from, and CS2 1901/2664 test
  * `get_varp 365 >= 9`; CS2 9104 gates an Ape Atoll unlock on `>= 2`. The finer
@@ -54,8 +61,9 @@
  *    variant are not simulated; the child's "enough time has passed" waits are a
  *    30 second timer instead of an aunt round trip.
  *  - Teleports use fixed tiles; the chapter 4 arena is the cache's jungle-demon
- *    room on plane 1, and only the Jungle Demon is spawned for the fight (no
- *    squad NPCs, no cutscenes).
+ *    room on plane 1. The Jungle Demon, Garkor and Zooknock are spawned for the
+ *    fight (the wiki has the whole squad summoned, and Zooknock is the way
+ *    out); the squad does not fight, and there are no cutscenes.
  *  - The start requires The Grand Tree and Tree Gnome Village (the wiki's
  *    requirement list); the quest has no skill requirement, so none is
  *    enforced.
@@ -275,6 +283,9 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     ObjectIdentifiers.JAIL_DOOR_2, // 4800
   ]);
   const REINITIALISATION_PANEL_ID = ObjectIdentifiers.REINITIALISATION_PANEL; // 4871
+  // The denture building's south doorway at 2764,2764; its open leaf (4711) is
+  // nameless, so the shared Doors plugin can't pair it.
+  const DENTURE_DOORWAY_ID = ObjectIdentifiers.DOORWAY_7; // 4710
   const TEMPLE_TRAPDOOR_IDS = new Set([
     ObjectIdentifiers.TRAPDOOR_20, // 4879
     ObjectIdentifiers.TRAPDOOR_21, // 4880
@@ -288,6 +299,11 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   // Where those four objects stand in the cache, so a claim only fires for the
   // object the player actually clicked and only from the plane it stands on.
   const TEMPLE_TRAPDOOR_TILE = new Location(2807, 2785, 0);
+  const DENTURE_DOORWAY_TILE = new Location(2764, 2764, 0);
+  // The Bamboo Gate's two 2x1 leaves (2719-2722, 2766) leave one way through,
+  // x 2720; live data crosses it from 2720,2765 to 2720,2767 and back.
+  const BAMBOO_GATE_SOUTH = new Location(2720, 2765, 0);
+  const BAMBOO_GATE_NORTH = new Location(2720, 2767, 0);
   const TEMPLE_ROPE_TILE = new Location(2808, 9201, 0);
   const MOULD_ROOM_ROPE_TILE = new Location(2764, 9165, 0);
   const WATCHTOWER_TOP_TILE = new Location(2729, 2766, 2);
@@ -309,16 +325,27 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   const ATOLL_SURFACE_LANDING = new Location(2805, 2786, 0);
   const ARENA_PLAYER = new Location(2713, 9174, 1);
   const ARENA_DEMON = new Location(2713, 9168, 1);
+  const ARENA_GARKOR = new Location(2711, 9175, 1);
+  const ARENA_ZOOKNOCK = new Location(2715, 9175, 1);
+  // The final-battle variants (gameval mm_garkor_final_battle / mm_zooknock_final_battle).
+  const ARENA_GARKOR_ID = NpcIdentifiers.GARKOR; // 1434
+  const ARENA_ZOOKNOCK_ID = NpcIdentifiers.ZOOKNOCK; // 1442
   const ZOO_PEN = new Location(2602, 3280, 0);
   const ZOO_OUTSIDE = new Location(2596, 3276, 0);
   const WATCHTOWER_KRUK_LANDING = new Location(2730, 2766, 0);
 
   const ZOO_IDS = { minX: 2594, maxX: 2612, minY: 3272, maxY: 3286 };
+  // Quest Helper's jungleDemonRoom zone.
+  const JUNGLE_DEMON_ROOM = { minX: 2671, maxX: 2749, minY: 9151, maxY: 9214, levels: [0, 1] };
   const WEST_VALLEY_ZONE = { minX: 2687, maxX: 2737, minY: 2738, maxY: 2766, levels: [0] };
   const HANGAR_ZONES = [
     { minX: 2380, maxX: 2406, minY: 9869, maxY: 9913, levels: [0] },
     { minX: 2635, maxX: 2662, minY: 4492, maxY: 4533, levels: [0] },
   ];
+
+  // The minders walk outside the pen's fence, which has no gate; a caged player
+  // talks to them through it.
+  const MINDER_TALK_RANGE = 3;
 
   const CHILD_WAIT_MS = 30000; // "enough time has passed" approximation
   const BANANAS_FOR_CHILD = 5;
@@ -390,7 +417,8 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     MONKEY_DELIVERED_ATTRIBUTE, TRAINING_CLAIMED_ATTRIBUTE,
   ];
 
-  const demons = new Map();
+  /** The owner-only NPCs of each player's final battle. */
+  const arenaNpcs = new Map();
 
   let quest;
 
@@ -404,6 +432,20 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
 
   function setStage(player, value) {
     if (quest.getStage(player) !== value) quest.setStage(player, value);
+  }
+
+  /** The live mm_main value for a saved stage (see the header). */
+  function wireStage(stage, player) {
+    if (stage <= STAGE_SHIPYARD || stage >= STAGE_COMPLETE) return stage;
+    if (stage < STAGE_ATOLL) return 2;
+    if (stage === STAGE_ATOLL) return 3;
+    if (flag(player, DEMON_KILLED_ATTRIBUTE)) return 6;
+    return flag(player, MONKEY_DELIVERED_ATTRIBUTE) ? 5 : 4;
+  }
+
+  /** Re-sends mm_main after a flag its wire value reads has changed. */
+  function sendWireStage(player) {
+    player.getPacketSender().sendConfig(VARP_MM_MAIN, quest.varpValue(stageOf(player), player));
   }
 
   /** Asks QuestRuntime whether another registered quest has completed. */
@@ -462,6 +504,10 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
 
   function inHangar(player) {
     return HANGAR_ZONES.some((zone) => inZone(player.getLocation(), zone));
+  }
+
+  function inArena(player) {
+    return arenaNpcs.has(player) && inZone(player.getLocation(), JUNGLE_DEMON_ROOM);
   }
 
   function onCrashIsland(player) {
@@ -524,9 +570,10 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   function selectNarnodeVariant({ npcId, player }) {
     if (!NARNODE_IDS.has(npcId)) return null;
     const stage = stageOf(player);
-    // Monkey Madness II also owns Narnode after The Grand Tree. Yield so its
-    // later selector can choose the active quest's canonical transcript.
-    if (stage >= STAGE_COMPLETE && otherQuestStage(player, "grand_tree") >= 160) return null;
+    // Monkey Madness II owns Narnode once it has started: yield so its later
+    // selector can choose the active quest's transcript. (A startable MM2 is
+    // offered by MM2's own Talk-to handler before any variant is chosen.)
+    if (stage >= STAGE_COMPLETE && otherQuestStage(player, "monkey_madness_ii") > 0) return null;
     if (stage >= STAGE_COMPLETE) return { page: "King Narnode Shareen", variant: "after-monkey-madness-i" };
     if (stage >= STAGE_CHAPTERS) {
       return flag(player, DEMON_KILLED_ATTRIBUTE)
@@ -659,6 +706,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     if (stage >= STAGE_COMPLETE) return { page: "Garkor", variant: "standard-dialogue-after-monkey-madness-i" };
     if (stage < STAGE_ATOLL) return null;
     if (flag(player, DEMON_KILLED_ATTRIBUTE)) return "chapter-4-talking-to-garkor-after-killing-the-jungle-demon";
+    if (inArena(player)) return "chapter-4-talking-to-garkor-or-zooknock-during-the-final-battle";
     if (stage >= STAGE_CHAPTERS) {
       if (flag(player, SIGIL_GIVEN_ATTRIBUTE)) return "chapter-4-talking-to-garkor-again";
       if (flag(player, CHAPTER4_SEEN_ATTRIBUTE)) return "chapter-4";
@@ -699,6 +747,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     const stage = stageOf(player);
     if (stage >= STAGE_CHAPTERS) {
       if (flag(player, DEMON_KILLED_ATTRIBUTE)) return "chapter-4-talking-to-zooknock";
+      if (inArena(player)) return "chapter-4-talking-to-garkor-or-zooknock-during-the-final-battle";
       return "chapter-3-talking-to-zooknock";
     }
     if (stage < STAGE_ATOLL) return null;
@@ -903,8 +952,11 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
       case "XCc1uo": // Kruk: transformed into a Karamjan monkey
       case "0Uwg_-": // Awowogei: as a Karamjan monkey
         return monkeyForm(player);
-      case "VcMNHp": // sigil: first time
-        return !flag(player, SIGIL_USED_ATTRIBUTE);
+      case "VcMNHp": { // sigil: first time (recorded here: the shake message comes before it)
+        const first = !flag(player, SIGIL_USED_ATTRIBUTE);
+        player.setAttribute(SIGIL_USED_ATTRIBUTE, true);
+        return first;
+      }
       case "pgN5Sw": // sigil: subsequent times
         return flag(player, SIGIL_USED_ATTRIBUTE);
       case "Agjjnw": // the player is male
@@ -1078,8 +1130,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
         if (!hasItem(player, SQUAD_SIGIL_ITEM)) addItem(player, SQUAD_SIGIL_ITEM);
         return;
       case "vEetSW": // the sigil shakes: off to the final battle (message)
-        player.setAttribute(SIGIL_USED_ATTRIBUTE, true);
-        spawnDemon(player);
+        spawnArena(player);
         player.moveTo(ARENA_PLAYER);
         return;
       case "NP0anE": // "Somewhere far below the Ape Atoll..." (chapter 4 cutscene)
@@ -1088,10 +1139,12 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
         return;
       case "owLeUo": // Bonzara teleports the player to the surface
         event.handled = true;
+        clearArena(player);
         player.moveTo(ATOLL_SURFACE_LANDING);
         return;
       case "44E_SM": // Zooknock teleports the player out of the plantation
         event.handled = true;
+        clearArena(player);
         player.moveTo(ATOLL_SURFACE_LANDING);
         return;
       case "iKXnuQ": // "Congratulations! Quest complete!"
@@ -1122,20 +1175,34 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     return false;
   }
 
-  /** Owner-only Jungle Demon for the player's final battle. */
-  function spawnDemon(player) {
-    const existing = demons.get(player);
-    if (existing && existing.isRegistered?.() !== false) api.removeNpc(existing);
-    const npc = api.spawnNpc({
-      id: JUNGLE_DEMON_NPC_ID,
-      x: ARENA_DEMON.x,
-      y: ARENA_DEMON.y,
-      z: ARENA_DEMON.z,
+  function spawnArenaNpc(player, id, tile) {
+    return api.spawnNpc({
+      id,
+      x: tile.x,
+      y: tile.y,
+      z: tile.z,
       wanderRadius: 0,
       owner: player,
       ownerOnly: true,
     });
-    if (npc) demons.set(player, npc);
+  }
+
+  function clearArena(player) {
+    for (const npc of arenaNpcs.get(player) ?? []) {
+      if (npc.isRegistered?.() !== false) api.removeNpc(npc);
+    }
+    arenaNpcs.delete(player);
+  }
+
+  /** Owner-only Jungle Demon, Garkor and Zooknock for the player's final battle. */
+  function spawnArena(player) {
+    clearArena(player);
+    const npcs = [
+      flag(player, DEMON_KILLED_ATTRIBUTE) ? null : spawnArenaNpc(player, JUNGLE_DEMON_NPC_ID, ARENA_DEMON),
+      spawnArenaNpc(player, ARENA_GARKOR_ID, ARENA_GARKOR),
+      spawnArenaNpc(player, ARENA_ZOOKNOCK_ID, ARENA_ZOOKNOCK),
+    ].filter(Boolean);
+    arenaNpcs.set(player, npcs);
   }
 
   function grantTraining(player, stepId) {
@@ -1234,7 +1301,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
       return;
     }
     if (ZOOKNOCK_IDS.has(npcId) && flag(player, GARKOR_ASKED_ATTRIBUTE)
-      && text === "I have the necessary magic to perform the shapeshifting spell, but we needed a human to transform.") {
+      && text === "Garkor had long decided that we need a monkey insider. I have the necessary magic to perform the shapeshifting spell, but we needed a human to transform.") {
       setHelperProgress(player, ZOOKNOCK_HELPER_ATTRIBUTE, VARBIT_MM_ZOOKNOCK, 5);
       return;
     }
@@ -1490,7 +1557,9 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     }
     if (BAMBOO_GATE_IDS.has(objectId) && option === "Open") {
       event.handled = true;
-      stepThrough(player, event.location);
+      // stepThrough suits a one-tile door; across this wide gate it would land
+      // the player on the gate row, walled in beside the leaves.
+      player.moveTo(player.getLocation().getY() >= BAMBOO_GATE_NORTH.getY() ? BAMBOO_GATE_SOUTH : BAMBOO_GATE_NORTH);
       return;
     }
     if (TEMPLE_TRAPDOOR_IDS.has(objectId) && (option === "Open" || option === "Climb-down")) {
@@ -1586,6 +1655,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     }
     if (hasItem(player, MONKEY_ITEM)) {
       player.setAttribute(MONKEY_DELIVERED_ATTRIBUTE, true);
+      sendWireStage(player);
       player.getInventory().deleteNumber(MONKEY_ITEM, 1);
       startTranscript(api, player, AWOWOGEI_CHATHEAD_ID, PAGE, "chapter-3-bringing-awowogei-a-monkey");
       return;
@@ -1609,10 +1679,10 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     if (option === "Travel"
       && (DAERO_IDS.has(npcId) || WAYDAR_IDS.has(npcId) || LUMDO_IDS.has(npcId))) {
       event.handled = true;
-      // Daero's Travel is only the "how do I leave" quip; Waydar and Lumdo
-      // reuse their talk transcripts, whose "Yes, let's go." / "As you wish."
-      // lines do the moving.
-      const choice = DAERO_IDS.has(npcId)
+      // Daero's Travel in the hangar is only the "how do I leave" quip; in the
+      // Grand Tree it, like Waydar's and Lumdo's, reuses the talk transcript,
+      // whose "Yes" / "Yes, let's go." / "As you wish." lines do the moving.
+      const choice = DAERO_IDS.has(npcId) && inHangar(player)
         ? "chapter-1-the-underground-hangar-selecting-travel-at-daero-when-in-the-hangar"
         : selectVariant({ player, npcId, npc: event.npc });
       const variant = typeof choice === "string" ? choice : choice?.variant;
@@ -1652,6 +1722,15 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     return false;
   }
 
+  /** From inside the zoo pen the Monkey minder is reached across the fence. */
+  function routeMinderTalk(request) {
+    const { player, npcId } = request;
+    if (!MONKEY_MINDER_IDS.has(npcId) || !flag(player, MONKEY_CAPTURED_ATTRIBUTE)) return;
+    if (!inZone(player.getLocation(), ZOO_IDS)) return;
+    request.range = Math.max(request.range ?? 1, MINDER_TALK_RANGE);
+    request.ignoreProjectileClip = true;
+  }
+
   // ==========================================================================
   // Doors, zones, death, login
   // ==========================================================================
@@ -1664,8 +1743,26 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     return true;
   }
 
+  function isAt(location, tile) {
+    return location?.x === tile.getX() && location?.y === tile.getY() && (location?.z ?? 0) === tile.getZ();
+  }
+
   function handleDoorToggle(request) {
     const { player, objectId, location } = request;
+    // Doors treats every "Trapdoor" as a door leaf and would swap in the open
+    // trapdoor a tile off, out of reach; the plugin's own Open drops the player
+    // into the temple dungeon instead.
+    if (TEMPLE_TRAPDOOR_IDS.has(objectId) && isAt(location, TEMPLE_TRAPDOOR_TILE)) {
+      request.handled = true;
+      climbTo({ player, object: request.object }, "ladders:climbDown", TEMPLE_DUNGEON_LANDING);
+      return;
+    }
+    // The live doorway opens both ways (Shortest Path's transport row for 4710).
+    if (objectId === DENTURE_DOORWAY_ID && isAt(location, DENTURE_DOORWAY_TILE)) {
+      request.handled = true;
+      stepThrough(player, location);
+      return;
+    }
     if (!SHIPYARD_GATE_IDS.has(objectId)) return;
     // The shared Doors plugin may or may not pair these gate leaves; this plugin
     // owns the conversation and the passage either way.
@@ -1688,11 +1785,23 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     const owner = npc.getOwner?.();
     if (owner && owner !== killer) return;
     killer.setAttribute(DEMON_KILLED_ATTRIBUTE, true);
+    sendWireStage(killer);
     killer.sendMessage("You have defeated the Jungle Demon!");
+  }
+
+  function handleLogout({ player }) {
+    clearArena(player);
   }
 
   function handleLogin({ player }) {
     syncGnomeVarps(player);
+    // Owner-only NPCs don't outlive a logout or restart; back in the arena
+    // mid-battle, the squad (and the demon, if still alive) are summoned again
+    // so Zooknock can still teleport the player out.
+    if (stageOf(player) === STAGE_CHAPTERS && flag(player, SIGIL_USED_ATTRIBUTE)
+      && inZone(player.getLocation(), JUNGLE_DEMON_ROOM)) {
+      spawnArena(player);
+    }
   }
 
   function handleBootstrap({ player }) {
@@ -1854,6 +1963,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     varpId: VARP_MM_MAIN,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
+    varpValue: wireStage,
     questPoints: 3,
     xpRewards: [],
     rewardItemId: COINS_ITEM,
@@ -1882,8 +1992,10 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   api.onCanEquip(handleCanEquip);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcInteraction(handleNpcInteraction);
+  api.onNpcRoute(routeMinderTalk);
   api.onNpcDeath(handleNpcDeath);
   api.onZoneEnter(WEST_VALLEY_ZONE, handleJailZone);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
 };
