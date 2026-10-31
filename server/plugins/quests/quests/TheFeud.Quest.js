@@ -1338,7 +1338,8 @@ module.exports = function registerTheFeudQuest(api) {
   }
 
   function hideBehindCactus(event) {
-    const { player } = event;
+    const { player, objectId } = event;
+    if (objectId !== CACTUS_OBJECT_ID) return false;
     const current = stage(player);
     if (current < STAGE_SAFE_JOB || current > STAGE_STAKED_OUT) return false;
     event.handled = true;
@@ -1347,7 +1348,8 @@ module.exports = function registerTheFeudQuest(api) {
   }
 
   function searchMayorDesk(event) {
-    const { player } = event;
+    const { player, objectId } = event;
+    if (objectId !== DESK_OBJECT_ID) return false;
     if (stage(player) !== STAGE_INSIDE) return false;
     event.handled = true;
     startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-searching-the-mayor-s-study-desk");
@@ -1355,7 +1357,8 @@ module.exports = function registerTheFeudQuest(api) {
   }
 
   function searchMayorBed(event) {
-    const { player } = event;
+    const { player, objectId } = event;
+    if (objectId !== BED_OBJECT_ID) return false;
     if (stage(player) !== STAGE_INSIDE) return false;
     event.handled = true;
     startTranscript(api, player, OPERATOR_ID, PAGE, "breaking-and-entering-searching-the-mayor-s-bed");
@@ -1363,7 +1366,8 @@ module.exports = function registerTheFeudQuest(api) {
   }
 
   function searchMayorLandscape(event) {
-    const { player } = event;
+    const { player, objectId } = event;
+    if (objectId !== LANDSCAPE_OBJECT_ID) return false;
     if (stage(player) !== STAGE_INSIDE) return false;
     event.handled = true;
     if (hasFlag(player, FLAG_SAFE_UNLOCKED)) {
@@ -1884,7 +1888,7 @@ module.exports = function registerTheFeudQuest(api) {
     if (!hasDesertDisguise(player)) {
       const inventory = player.getInventory();
       if (typeof inventory.isFull === "function" && inventory.isFull()) {
-        inventory.forceAdd(new Item(DESERT_DISGUISE_ITEM_ID, 1));
+        inventory.forceAdd(player, new Item(DESERT_DISGUISE_ITEM_ID, 1));
       } else {
         inventory.adds(DESERT_DISGUISE_ITEM_ID, 1);
       }

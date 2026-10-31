@@ -11,6 +11,9 @@ const { test, before } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
 const Runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 
@@ -23,6 +26,7 @@ Runtime.startTranscript = (api, player, npcId, page, variant) => {
 
 before(async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  ObjectDefinition.init();
 });
 
 function inventoryFixture(initial = new Map(), freeSlots = 28) {
@@ -232,6 +236,63 @@ function registerQuestPlugin() {
           .filter((hook) => hook.pluginName !== pluginName);
         if (kept.length) PluginManager.customEventHooks.set(eventName, kept);
         else PluginManager.customEventHooks.delete(eventName);
+      }
+    },
+  };
+}
+
+/**
+ * Registers the quest through the real createApi so named object hooks land in
+ * PluginManager.objectHooksByName and are dispatched exactly as in game.
+ */
+function registerQuestPluginReal() {
+  const snapshot = {
+    npcInteraction: PluginManager.npcInteractionHooks.length,
+    objectInteraction: PluginManager.objectInteractionHooks.length,
+    objectByName: new Map([...PluginManager.objectHooksByName].map(([name, hooks]) => [name, hooks.length])),
+    objectById: new Map([...PluginManager.objectHooksById].map(([id, hooks]) => [id, hooks.length])),
+    itemOnObject: PluginManager.itemOnObjectHooks.length,
+    itemOnObjectFallback: PluginManager.itemOnObjectFallbackHooks.length,
+    itemOnItem: PluginManager.itemOnItemHooks.length,
+    itemOnNpc: PluginManager.itemOnNpcHooks.length,
+    itemAction: PluginManager.itemActionHooks.length,
+    npcDeath: PluginManager.npcDeathHooks.length,
+    condition: PluginManager.npcDialogueConditionHooks.length,
+    login: PluginManager.loginHooks.length,
+    nextObjectHookOrder: PluginManager.nextObjectHookOrder,
+    custom: new Map([...PluginManager.customEventHooks].map(([name, hooks]) => [name, hooks.length])),
+  };
+  const pluginName = 'TheFeudRealApiTest';
+  require('../plugins/quests/quests/TheFeud.Quest')(PluginManager.createApi(pluginName));
+  const quest = Runtime.getRegisteredQuests().findLast((entry) => entry.key === 'the_feud');
+  return {
+    quest,
+    cleanup() {
+      PluginManager.npcInteractionHooks.length = snapshot.npcInteraction;
+      PluginManager.objectInteractionHooks.length = snapshot.objectInteraction;
+      for (const [name, hooks] of [...PluginManager.objectHooksByName]) {
+        const keep = snapshot.objectByName.get(name);
+        if (keep === undefined) PluginManager.objectHooksByName.delete(name);
+        else hooks.length = keep;
+      }
+      for (const [id, hooks] of [...PluginManager.objectHooksById]) {
+        const keep = snapshot.objectById.get(id);
+        if (keep === undefined) PluginManager.objectHooksById.delete(id);
+        else hooks.length = keep;
+      }
+      PluginManager.itemOnObjectHooks.length = snapshot.itemOnObject;
+      PluginManager.itemOnObjectFallbackHooks.length = snapshot.itemOnObjectFallback;
+      PluginManager.itemOnItemHooks.length = snapshot.itemOnItem;
+      PluginManager.itemOnNpcHooks.length = snapshot.itemOnNpc;
+      PluginManager.itemActionHooks.length = snapshot.itemAction;
+      PluginManager.npcDeathHooks.length = snapshot.npcDeath;
+      PluginManager.npcDialogueConditionHooks.length = snapshot.condition;
+      PluginManager.loginHooks.length = snapshot.login;
+      PluginManager.nextObjectHookOrder = snapshot.nextObjectHookOrder;
+      for (const [name, hooks] of [...PluginManager.customEventHooks]) {
+        const keep = snapshot.custom.get(name);
+        if (keep === undefined) PluginManager.customEventHooks.delete(name);
+        else hooks.length = keep;
       }
     },
   };
@@ -933,6 +994,96 @@ test('The desert disguise is rebuilt without duplication and quest leftovers are
     quest.setStage(noDisguise, 27);
     action(noDisguise, '_jFbux');
     assert.equal(noDisguise.inventory.getAmount(I.DESERT_DISGUISE), 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test('A full inventory drops the completion disguise through the real container API', () => {
+  const { quest, cleanup } = registerQuestPluginReal();
+  const realTaskManager = core.TaskManager;
+  core.TaskManager = { submit() {} };
+  try {
+    const player = new Player(null);
+    player.setUsername('feud-full-inventory');
+    player.setLocation(new core.Location(3361, 2956, 0));
+    player.getPacketSender = () => new Proxy({}, { get: () => () => {} });
+    player.sendMessage = () => {};
+
+    const inventory = player.getInventory();
+    // 27 non-stackable items plus a coin stack fill all 28 slots.
+    for (let index = 0; index < 27; index++) inventory.adds(core.ItemIdentifiers.BONES, 1);
+    inventory.adds(core.ItemIdentifiers.COINS, 1000);
+    assert.equal(inventory.getFreeSlots(), 0, 'the inventory starts full');
+
+    quest.setStage(player, 27);
+    PluginManager.emitCustomEvent('npc-dialogue:action', { player, stepId: '_jFbux', handled: false });
+
+    assert.equal(quest.getStage(player), 28);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.DESERT_DISGUISE), 0,
+      'a full inventory keeps the reward on the ground');
+    const ground = ItemOnGroundManager.getGroundItem(
+      player.getUsername(),
+      core.ItemIdentifiers.DESERT_DISGUISE,
+      player.getLocation(),
+      player.getPrivateArea(),
+    );
+    assert.ok(ground, 'forceAdd(player, item) registers the disguise at the reward location');
+    assert.equal(ground.getItem().getAmount(), 1);
+  } finally {
+    core.TaskManager = realTaskManager;
+    cleanup();
+  }
+});
+
+test('Named mayor-house searches ignore same-named objects outside Pollnivneach', () => {
+  const { quest, cleanup } = registerQuestPluginReal();
+  try {
+    const player = playerFixture();
+    quest.setStage(player, 14);
+    transcriptCalls.length = 0;
+
+    const emit = (objectId, definition, clickType) => {
+      const event = { player, objectId, object: {}, definition, clickType, handled: false };
+      PluginManager.emitObjectInteraction(event);
+      return event;
+    };
+    const synthetic = (name, action) => ({
+      getName: () => name,
+      getInteractions: () => [action, null, null, null, null],
+    });
+
+    // Cache-backed same-name locs: Bed 2907 (second-click Search) and Study
+    // desk 2714 are not the mayor's house objects.
+    const unrelatedBed = ObjectDefinition.forId(2907);
+    assert.equal(unrelatedBed.getName(), 'Bed');
+    assert.equal(unrelatedBed.getInteractions()[1], 'Search');
+    assert.equal(emit(2907, unrelatedBed, 2).handled, false);
+    assert.equal(emit(2714, ObjectDefinition.forId(2714), 1).handled, false);
+    assert.equal(transcriptCalls.length, 0);
+
+    // The other names have no second quest loc with the same action, so
+    // exercise the id guard with the registered name/action shape.
+    assert.equal(emit(891, synthetic('Landscape', 'Search'), 1).handled, false);
+    assert.equal(emit(608, synthetic('Study desk', 'Search'), 1).handled, false);
+    assert.equal(emit(417, synthetic('Bed', 'Search'), 1).handled, false);
+    assert.equal(transcriptCalls.length, 0);
+
+    // The canonical mayor's-house objects still play their transcripts. The
+    // landscape's first search opens the safe dial, so it only proves handled.
+    assert.equal(emit(6274, ObjectDefinition.forId(6274), 1).handled, true);
+    assert.equal(transcriptCalls.at(-1).variant, 'breaking-and-entering-searching-the-mayor-s-bed');
+    assert.equal(emit(6275, ObjectDefinition.forId(6275), 1).handled, true);
+    assert.equal(transcriptCalls.at(-1).variant, 'breaking-and-entering-searching-the-mayor-s-study-desk');
+    assert.equal(emit(6276, ObjectDefinition.forId(6276), 1).handled, true);
+    assert.ok(player.messages.some((message) => message.includes('nondescript picture')));
+
+    // The cactus is only usable during the stake-out stages.
+    quest.setStage(player, 13);
+    assert.equal(emit(1396, synthetic('Cactus', 'Hide-behind'), 1).handled, false);
+    assert.equal(transcriptCalls.length, 2);
+    assert.equal(emit(6277, ObjectDefinition.forId(6277), 1).handled, true);
+    assert.equal(transcriptCalls.at(-1).variant, 'staking-out-the-house-hiding-behind-the-cactus');
   } finally {
     cleanup();
   }
