@@ -153,6 +153,26 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   assert.doesNotThrow(() => plugin.register(api));
 });
 
+test('Lost City only warns about low combat when a starting skill is also missing', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/LostCity.Quest')(api);
+  const condition = handlers.condition.at(-1);
+  const playerAt = (combat, crafting, woodcutting) => ({
+    getSkillManager: () => ({
+      getCombatLevel: () => combat,
+      getMaxLevel: skill => skill === api.core.Skill.CRAFTING ? crafting
+        : skill === api.core.Skill.WOODCUTTING ? woodcutting : 1,
+    }),
+  });
+  const text = 'If the player has lower than 45 combat and either 31 Crafting or 36 Woodcutting:';
+  assert.equal(condition({ player: playerAt(126, 1, 1), text }), false,
+    'a high-combat player missing both skills must not receive the low-combat warning');
+  assert.equal(condition({ player: playerAt(40, 1, 1), text }), true,
+    'the combined warning applies when combat and a skill are both below the requirement');
+  assert.equal(condition({ player: playerAt(40, 31, 36), text }), false,
+    'meeting both skill requirements suppresses the warning');
+});
+
 test('Family Crest only handles gold rocks in Witchaven and Mining recognizes the shared gold-rock object', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/FamilyCrest.Quest')(api);
