@@ -65,20 +65,15 @@ export function getSequenceFrameIds(data: Int8Array, revision = 237): number[] {
 }
 
 /**
- * The seq fields that say how long the client keeps an animation on screen and whether it
- * withholds the actor's steps while it plays. Names follow the client's own `SeqType`
- * (client/rs/config/seqtype/SeqType.ts) so Animation stall can be compared between the two
- * sides without translating opcodes twice.
+ * The seq fields core needs from the client's own `SeqType`
+ * (client/rs/config/seqtype/SeqType.ts): how long the animation stays on screen, its interrupt
+ * priority and its standing priority.
  */
 export type SequenceDefinition = {
     /** SeqType.priority (opcode 10); -1 when the cache doesn't set it. */
     priority: number;
-    /** SeqType.precedenceAnimating (opcode 9); -1 when unset. */
-    movementPriority: number;
     /** SeqType.forcedPriority (opcode 5); -1 when unset. */
     forcedPriority: number;
-    /** Opcode 3 or 17 present: the client derives 2 for unset priorities instead of 0. */
-    masked: boolean;
     /** Client cycles one pass of the animation takes; 0 when the sequence has no frames. */
     clientCycles: number;
 };
@@ -117,9 +112,7 @@ function decodeSequence(id: number): SequenceDefinition {
     if (cached !== undefined) return cached;
     const definition: SequenceDefinition = {
         priority: -1,
-        movementPriority: -1,
         forcedPriority: -1,
-        masked: false,
         clientCycles: 0,
     };
     try {
@@ -144,14 +137,12 @@ function decodeSequence(id: number): SequenceDefinition {
                 const count = buffer.readUnsignedByte();
                 if (buffer.remaining < count) break;
                 buffer.offset += count;
-                definition.masked = true;
                 continue;
             }
             if (opcode === 5 || opcode === 9 || opcode === 10) {
                 const value = buffer.readUnsignedByte();
                 if (opcode === 5) definition.forcedPriority = value;
-                else if (opcode === 9) definition.movementPriority = value;
-                else definition.priority = value;
+                else if (opcode === 10) definition.priority = value;
                 continue;
             }
             // cachedModelId: the animation renders from a skeleton, so its length is the
@@ -207,30 +198,17 @@ export function getSequenceForcedPriority(id: number): number {
 }
 
 /**
- * How long an animation stays on screen, and whether the client withholds the actor's steps
- * while it plays.
+ * How many ticks the client keeps an animation on screen (its frame lengths / 30). Core uses
+ * this to stop a click cutting a swing away before the client has finished it.
  *
- * `holdsSteps` is the client's own condition (PlayerEcs/NpcEcs.isActionSequenceBlockingMovement):
- * a priority of 0 withholds steps while stationary, `precedenceAnimating` 0 while already moving,
- * and `SeqType.post()` derives 0 from an unset value unless the sequence carries masks. This is a
- * *visual* hold only - the server keeps walking the true tile, so the animation plays over a tile
- * that has already moved and the client catches up when it ends. That is the Wiki's partial
- * stall. A full stall (no movement or actions at all) is content, not seq config, and is never
- * derived here: AnimationStalls.plugin.js promotes a row to it. Core uses `ticks` only; the
- * step fields describe what the client does with the same seq. Wiki: Animation stall.
+ * This is the *partial* half of the Wiki's Animation stall: the client may withhold the actor's
+ * steps while it plays, but the server keeps walking the true tile, so the animation plays over
+ * a tile that has already moved and the client catches up when it ends. A full stall (no
+ * movement or actions at all) is content, not seq config, and is never derived here:
+ * AnimationStalls.plugin.js can promote a verified row to it. Wiki: Animation stall.
  */
-export function getSequenceStall(
-    id: number,
-    moving = false
-): { ticks: number; holdsSteps: boolean; cancelsOnStep: boolean } {
-    const definition = decodeSequence(id);
-    const derive = (value: number): number => value === -1 ? (definition.masked ? 2 : 0) : value;
-    const priority = derive(definition.priority);
-    return {
-        ticks: Math.ceil(definition.clientCycles / CLIENT_CYCLES_PER_TICK),
-        holdsSteps: (moving ? derive(definition.movementPriority) : priority) === 0,
-        cancelsOnStep: priority === 1,
-    };
+export function getSequenceStall(id: number): { ticks: number } {
+    return { ticks: Math.ceil(decodeSequence(id).clientCycles / CLIENT_CYCLES_PER_TICK) };
 }
 
 export function getLastSequenceId(): number {

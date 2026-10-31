@@ -52,22 +52,15 @@ test('a sequence priority lookup reads the decoded archive, not a fresh decompre
   assert.equal(getSequencePriority(733), 1, 'cooking is still dropped by movement');
 });
 
-// Wiki: Animation stall. The seq config only describes the *visual* half: whether the client
-// withholds the actor's steps while the animation plays. That is a partial stall - the server
-// still walks the true tile. Full stalls are content, never cache config.
-test('the cache says which animations withhold steps, for how long, and which a step cancels', async () => {
+// Wiki: Animation stall. The seq config says how long the client keeps the animation on screen.
+// It can withhold the actor's steps too (a partial stall), but the server keeps walking the true
+// tile; full stalls are content, never cache config.
+test('the cache says how long a swing animation stays on screen', async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
-  // Crossbows carry no masks and run 81 client cycles: the hunters' crossbow stall the Wiki names.
-  assert.deepEqual(getSequenceStall(4230), { ticks: 3, holdsSteps: true, cancelsOnStep: false });
-  // Cast animations (711, 710, 716...) carry no masks either: a partial stall while they play.
-  assert.equal(getSequenceStall(711).holdsSteps, true);
-  // A battleaxe swing is masked, so the client lets the player step out of it.
-  assert.equal(getSequenceStall(401).holdsSteps, false, 'battleaxe swing withholds no steps');
-  assert.equal(getSequenceStall(401).ticks, 2);
-  // Net fishing is dropped by a step, so it holds nothing at all.
-  assert.equal(getSequenceStall(621).cancelsOnStep, true);
-  // Moving when the animation starts uses precedenceAnimating, exactly as the client does.
-  assert.equal(getSequenceStall(401, true).holdsSteps, false);
+  // Crossbows run 81 client cycles: the hunters' crossbow stall the Wiki names.
+  assert.equal(getSequenceStall(4230).ticks, 3);
+  assert.equal(getSequenceStall(401).ticks, 2, 'a battleaxe swing');
+  assert.equal(getSequenceStall(711).ticks, 3, 'a wind strike cast');
 });
 
 /** A player with a real Combat, and only the packet and movement plumbing stubbed out. */
@@ -173,6 +166,7 @@ test('a swing through Combat measures a partial stall and keeps the true tile wa
   assert.deepEqual(sent, [4230], 'the swing played its animation');
   assert.equal(combat.getAnimationStallTicks(), 0,
       'the seq withholds steps visually, so it is a partial stall, not a full one');
+  assert.equal(combat.getIncomingHitCycle(), -1, 'a partial stall does not stack incoming hits');
   assert.equal(queue.getMobility().canMove(), true, 'a partial stall does not hold their feet');
   queue.addSteps(new Location(3200, 3201, 0));
   assert.equal(queue.size(), 1, 'a click during the animation still walks the true tile');
@@ -612,35 +606,37 @@ test('content that stops a full stall on purpose releases it with the animation'
   assert.equal(combat.getAnimationStallTicks(), 0, 'teleports and deaths are not held by a swing');
 });
 
-test('the definition file states the stalls the cache cannot see', () => {
+test('the definition file declares no unsourced full stalls', () => {
   const { Equipment } = require('../dist/game/model/container/impl/Equipment');
   const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+  const stalls = require('../plugins/combat/data/animation-stalls.json');
+  // The Wiki's "Attack animation stalls" list does not distinguish full stalls from partial
+  // ones, so a row needs evidence beyond membership in it. None has that today.
+  assert.deepEqual(stalls.animations, {}, 'no animation rows');
+  assert.deepEqual(stalls.weapons, {}, 'no weapon rows');
+
   let applyStall = null;
   require('../plugins/combat/AnimationStalls.plugin').register({
     core: { Equipment },
     onAnimationStall: (handler) => { applyStall = handler; },
   });
 
-  const swing = (weaponId) => ({
+  // The leaf-bladed battleaxe's walk delay was fixed on 9 July 2020 (Wiki: Leaf-bladed
+  // battleaxe - Changes), so it is a partial stall like the other listed attack animations.
+  const named = {
     player: {
       getEquipment: () => ({
-        get: (slot) => slot === Equipment.WEAPON_SLOT ? { getId: () => weaponId } : null,
+        get: (slot) => slot === Equipment.WEAPON_SLOT
+            ? { getId: () => ItemIdentifiers.LEAF_BLADED_BATTLEAXE }
+            : null,
       }),
     },
     animationId: 401,
     ticks: 2,
     kind: 'partial',
     holdsHits: true,
-  });
-
-  // Wiki: Animation stall names the leaf-bladed battleaxe, but its swing reuses the masked
-  // battleaxe seqs, which the cache therefore rates as free.
-  const named = swing(ItemIdentifiers.LEAF_BLADED_BATTLEAXE);
+  };
   applyStall(named);
-  assert.equal(named.kind, 'full', 'the row promotes the swing to a full stall');
-  assert.equal(named.ticks, 2, 'its length still comes from the cache');
-
-  const other = swing(ItemIdentifiers.GRANITE_MAUL);
-  applyStall(other);
-  assert.equal(other.kind, 'partial', 'a weapon the Wiki does not name keeps the cache answer');
+  assert.equal(named.kind, 'partial', 'no row: the battleaxe keeps core\'s partial stall');
+  assert.equal(named.ticks, 2, 'and its length still comes from the cache');
 });
