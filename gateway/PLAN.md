@@ -4,12 +4,24 @@ Goal: the official OSRS client (rev 241, launched through RSProx with a custom t
 tsps and plays with prod-like parity to the browser client. tsps-only plugin features are dropped
 and counted.
 
+## Status
+
+M0–M13 are done: login through trade, settings, the character designer, NPC model changes and
+tint, chat colours, and sailing. `COVERAGE.md` has no `todo` rows, and `yarn gateway:test` runs 56
+tests, live ones included. Fixes from play in RuneLite: forced movement (agility), instance
+rebuilds, scenes in private areas on the real map (the Fractured Archive), bank drags and tabs.
+
+Open:
+- Volume levels don't persist across logins.
+- The welcome screen shows on a black background with a "Loading" box over it.
+- Insert-mode bank drags, and two players on one boat, are untested.
+
 ## Decisions
 
 Made before this plan:
 - A separate Kotlin process in `gateway/`, on rsprot.
 - One tsps WebSocket session per player.
-- Target is the rev-241 client through RSProx; RuneLite is out of scope.
+- Target is the rev-241 client through RSProx (RuneLite launched through RSProx works too).
 - Plugin messages are dropped and counted.
 
 Made during planning:
