@@ -96,6 +96,34 @@ test("an Ironman can't pick up other players' items; their own and world spawns 
   assert.equal(event.handled, false, "normal accounts pick up as before");
 });
 
+test("stacks from different owners never merge, so an Ironman can't inherit a drop", t => {
+  const iron = account("iron", "ironman");
+  const main = account("main");
+  const manager = core.ItemOnGroundManager;
+  const { State } = require("../dist/game/entity/impl/grounditem/ItemOnGround");
+  const items = core.World.getItems(), previous = items.splice(0);
+  t.after(() => items.splice(0, items.length, ...previous));
+
+  // A main's drop cannot join the Ironman's public stack...
+  const ironPile = manager.registerLocation(iron, new core.Item(995, 10), new core.Location(3200, 3200));
+  ironPile.setState(State.SEEN_BY_EVERYONE);
+  const mainPile = manager.registerLocation(main, new core.Item(995, 5), new core.Location(3200, 3200));
+  assert.deepEqual([ironPile.getItem().getAmount(), mainPile.getItem().getAmount()], [10, 5]);
+  assert.equal(mainPile.getOwner(), "main");
+
+  // ...and the Ironman's drop cannot join the main's public stack.
+  const mainPublic = manager.registerLocation(main, new core.Item(995, 7), new core.Location(3201, 3200));
+  mainPublic.setState(State.SEEN_BY_EVERYONE);
+  const own = manager.registerLocation(iron, new core.Item(995, 3), new core.Location(3201, 3200));
+  assert.deepEqual([own.getOwner(), own.getItem().getAmount(), mainPublic.getItem().getAmount()],
+    ["iron", 3, 7]);
+
+  // The same owner still stacks, and the Ironman keeps it.
+  const merged = manager.registerLocation(iron, new core.Item(995, 2), new core.Location(3201, 3200));
+  assert.equal(own.getItem().getAmount(), 5);
+  assert.equal(items.includes(merged), false, "merged into the Ironman's own stack");
+});
+
 test("a kill another player helped with gives an Ironman nothing; a solo kill keeps its drop", () => {
   const iron = account("iron", "ironman");
   const helper = account("helper");

@@ -42,7 +42,7 @@ Each rule comes from the rsprox capture database (https://rsprox.net/database) o
 | Rule | Modes | Message |
 | --- | --- | --- |
 | No trading with players, either way | all | "You are an Ironman. You stand alone." (captured); to someone asking an Ironman: "*name* is an Ironman. He/She stands alone." (captured) |
-| No picking up items other players own (their drops and kills, also once public; unowned spawns are fine) | all | "You're an Ironman, so you can't take items that other players have dropped." (captured) |
+| No picking up items other players own (their drops and kills, also once public; unowned spawns are fine). Stacks from different owners never merge, so a public stack cannot absorb someone else's drop | all | "You're an Ironman, so you can't take items that other players have dropped." (captured) |
 | No drop from a kill another player damaged in the last 60 seconds (the same damage record that decides the killer; 0-damage hits aren't recorded) | all | "As an Ironman, you don't get loot if other players helped you kill the monster." (captured) |
 | A warning when attacking an npc another player damaged (once per npc) | all | "As an Ironman, you might not receive kill-credit for this monster." (captured) |
 | Loot from a player an Ironman kills is the fallen player's (Wiki: Ironmen can't take PvP loot) | all | none |
