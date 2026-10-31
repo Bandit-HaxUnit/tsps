@@ -99,7 +99,7 @@ class Interfaces(
                 val end = reader.u16().signed16()
                 val flags = reader.i32()
                 val ops = reader.i32()
-                if (exists(uid)) send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start, end, flags, ops)) else dropped()
+                if (exists(uid)) send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start, end, flags, ops)) else dropped(uid)
             }
             TspsServerPacket.WIDGET_RUN_SCRIPT -> runScriptBundle(reader)
             TspsServerPacket.RUN_CLIENT_SCRIPT -> script(reader.u16(), reader)
@@ -165,7 +165,7 @@ class Interfaces(
         }
         tree.gameframe(raw, mounted = true)
         openSub(target, group, type)
-        for (uid in hidden) if (exists(uid)) send(IfSetHide(uid ushr 16, uid and 0xFFFF, true)) else dropped()
+        for (uid in hidden) if (exists(uid)) send(IfSetHide(uid ushr 16, uid and 0xFFFF, true)) else dropped(uid)
         postScripts.forEach(send)
     }
 
@@ -199,7 +199,7 @@ class Interfaces(
     /** Old-format flags carry ops 1-10 in bits 1-10; IF_SETEVENTS_V2 wants them in events2. */
     private fun events(uid: Int, start: Int, end: Int, flags: Int) {
         val ops = (flags ushr 1) and OLD_OP_BITS
-        if (!exists(uid)) return dropped()
+        if (!exists(uid)) return dropped(uid)
         send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start.signed16(), end.signed16(), flags and (OLD_OP_BITS shl 1).inv(), ops))
     }
 
@@ -221,18 +221,16 @@ class Interfaces(
     private inline fun component(reader: TspsReader, message: (Int, Int) -> OutgoingGameMessage) {
         val uid = tree.remap(reader.i32())
         val built = message(uid ushr 16, uid and 0xFFFF)
-        if (exists(uid)) send(built) else dropped()
+        if (exists(uid)) send(built) else dropped(uid)
     }
 
-    private fun dropped() = DropCounter.down(DROPPED_COMPONENT)
+    private fun dropped(uid: Int) = DropCounter.missingComponent(uid)
 
     private fun TspsReader.optionalU8() = if (remaining > 0) u8() else 0
 
     private fun Int.signed16() = if (this == 0xFFFF) -1 else this
 
     private companion object {
-        /** Counted as its own "opcode": a widget message for a component the cache doesn't have. */
-        const val DROPPED_COMPONENT = -1
         const val MODAL = 0
         const val WELCOME_SCREEN = 378
         const val CUSTOM_INTERFACE_START = 30_000

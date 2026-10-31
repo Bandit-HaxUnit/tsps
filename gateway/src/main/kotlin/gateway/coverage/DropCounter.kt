@@ -13,6 +13,9 @@ object DropCounter {
     /** A tsps message with no 241 form (`down:<opcode>`). */
     fun down(opcode: Int) = count("down:$opcode")
 
+    /** A tsps interface message aimed at a component the client doesn't have (`missing:<group>:<component>`). */
+    fun missingComponent(uid: Int) = count("missing:${uid ushr 16}:${uid and 0xFFFF}")
+
     /** A client packet tsps has no use for (`up:<class>`). */
     fun up(message: Any) = count("up:${message.javaClass.simpleName}")
 
