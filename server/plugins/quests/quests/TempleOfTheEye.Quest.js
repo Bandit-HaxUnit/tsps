@@ -615,7 +615,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   }
 
   function play(player, npcId, variant) {
-    startTranscript(api, player, npcId, PAGE, variant);
+    return startTranscript(api, player, npcId, PAGE, variant);
   }
 
   function moveTo(player, tile) {
