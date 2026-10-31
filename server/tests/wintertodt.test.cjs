@@ -549,6 +549,35 @@ test('roots come every 3 ticks at 99 with a dragon axe; kindling every 4 outside
   assert.equal(player.spam.at(-1), 'You carefully fletch the root into a bundle of kindling.');
 });
 
+test('a carried or worn fletching knife speeds up every kindling after the first', () => {
+  startRound();
+  const player = fighter('Fletcher');
+  player.inventory.adds(Shared.ITEM.KNIFE);
+  for (let i = 0; i < 4; i++) player.inventory.adds(Shared.ITEM.BRUMA_ROOT);
+  player.inventory.adds(Shared.ITEM.FLETCHING_KNIFE);
+  hooks.itemOnItem['Knife|Bruma root']({ player });
+  ticks(3);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1, 'the first keeps the normal 4 ticks');
+  ticks(2);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1, 'the knife speeds up only from the second');
+  ticks(1);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 2, 'the second is 3 ticks later');
+  ticks(3);
+  assert.equal(player.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 3);
+
+  const equipped = fighter('Wielder');
+  equipped.inventory.adds(Shared.ITEM.KNIFE);
+  for (let i = 0; i < 3; i++) equipped.inventory.adds(Shared.ITEM.BRUMA_ROOT);
+  equipped.equipment.adds(Shared.ITEM.FLETCHING_KNIFE);
+  hooks.itemOnItem['Knife|Bruma root']({ player: equipped });
+  ticks(3);
+  assert.equal(equipped.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 1);
+  ticks(3);
+  assert.equal(equipped.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 2, 'equipped works the same as carried');
+  ticks(3);
+  assert.equal(equipped.inventory.getAmount(Shared.ITEM.BRUMA_KINDLING), 3);
+});
+
 test('the crates give one tool while you have none, and up to ten concoctions', () => {
   const player = fighter('Supplier');
   hooks.objects.Crate['Take-knife']({ player });
