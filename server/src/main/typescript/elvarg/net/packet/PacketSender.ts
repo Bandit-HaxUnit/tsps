@@ -98,6 +98,8 @@ import {
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
 const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 568;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
+/** The gameframe's side button click: selects the tab and runs its setup. */
+const TAB_SWITCH_SCRIPT = 915; // toplevel_sidebutton_switch
 /** PluginManager, loaded on first use (it imports this module, so not at load time). */
 let pluginManager: typeof import("../../plugins/PluginManager").PluginManager | null = null;
 const VARBIT_MULTICOMBAT_AREA = 4605;
@@ -473,11 +475,13 @@ export class PacketSender {
     return this;
   }
 
+  /**
+   * Switches the sidebar to `id`, the way the gameframe's side button does. The switch is a
+   * client script, not a packet: there is no tab-switch opcode, and 106 is WIDGET_SET_HIDDEN
+   * (uid + hidden, five bytes), so the old one-byte packet was rejected by the encoder.
+   */
   public sendTab(id: number): PacketSender {
-    let out = new PacketBuilder(106);
-    out.puts(id, ValueType.C);
-    this.player.getSession().write(out);
-    return this;
+    return this.sendClientScript(TAB_SWITCH_SCRIPT, id);
   }
 
   public sendChatboxInterface(id: number): PacketSender {
