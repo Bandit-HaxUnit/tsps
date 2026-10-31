@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 30 · ⚠️ passed with issues: 23 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 6 · untested: 120
+185 quests · ✅ passed: 30 · ⚠️ passed with issues: 22 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 7 · untested: 120
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -97,7 +97,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Merlin's Crystal](merlins-crystal/README.md) | untested |  |  |  |  |
 | [Misthalin Mystery](misthalin-mystery/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 1 |
 | [Monk's Friend](monks-friend/README.md) | ✅ passed |  | agent |  |  |
-| [Monkey Madness I](monkey-madness-i/README.md) | ⚠️ passed with issues | 2026-10-31 | agent | claude-opus-5-5 | 8 |
+| [Monkey Madness I](monkey-madness-i/README.md) | 🔁 needs recheck | 2026-10-31 | agent | claude-opus-5-5 | 6 |
 | [Monkey Madness II](monkey-madness-ii/README.md) | untested |  |  |  |  |
 | Mountain Daughter | untested |  |  |  |  |
 | [Mourning's End Part I](mournings-end-part-i/README.md) | untested |  |  |  |  |

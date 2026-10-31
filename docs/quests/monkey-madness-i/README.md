@@ -16,12 +16,26 @@ travel: travel_to
 The quest is played to the end across two watched runs: chapter 1 in the first, then chapters 2 to 4,
 the rewards, Daero's training, the repeat talk and a relog in the second. The second run fixed eight
 quest bugs, including two soft-locks (the zoo pen and the demon arena) and the mm_main wire values
-Quest Helper keys on. Open findings are the pronoun placeholders, a core varp overwrite, and the
-gaps the plugin documents (no sliding puzzle, a one-time jail).
+Quest Helper keys on. A later focused check covered the jail on every approach, the human
+exit from Marim and the hangar exit. Open findings are the pronoun placeholders, a core varp
+overwrite (#1647), and the sliding puzzle the plugin does not have.
 
 ## Findings
 
-Newest first. Nothing is filed as an issue yet; the fixes are in this branch's PR.
+Newest first. Nothing is filed as an issue yet; the fixes are in this branch's PR and #1645.
+
+- **fixed** The hangar Teleportation Device (4868-4870, Operate) did nothing. It is the hangar's
+  exit (wiki): it now lands the player south of the Gnome Ball field at 2393,3466.
+- **fixed** A human could not leave Marim except by the gate or a teleport: the south-east Bamboo
+  Ladder (4743/4744) climbs from plane 0 straight to plane 2, so the Ladders plugin found nothing
+  above it, and End of bridge (4745, Jump off) had no handler. The quest now owns both ends of the
+  ladder and the jump, with the landing tiles from Shortest Path's transport rows.
+- **fixed** The jail happened only once, and the Bamboo Gate let a human through. During the quest
+  a human is now knocked out and jailed on every approach up the valley or click on the gate (the
+  wiki's guide: "placed in the jail cell again"); only monkey form passes. Each catch is counted
+  for Lumo's sent-back lines, his 10/15/20/50/100-times lines and the one-time stuffed monkey
+  (3169). As exported those count lines sit after a random block that ends every option, so the
+  plugin plays the matching count's condition, or the random block, on its own.
 
 - **fixed** King Narnode's repeat talk after the quest played The Grand Tree's generic line. The
   plugin handed Narnode to Monkey Madness II whenever The Grand Tree was complete, which is always
@@ -56,20 +70,15 @@ Newest first. Nothing is filed as an issue yet; the fixes are in this branch's P
   "return to the hangar?" talk.
 - **open** Core: mounting the magic tab sends `SPELL_UNLOCK_VARPS`, which writes varp 365 =
   0x7fffffff (for the Ape Atoll Dungeon Teleport). Unwielding the greegree did that mid-quest, so
-  the client saw the quest as complete until the next login. Not quest code (`PacketSender`).
+  the client saw the quest as complete until the next login. Not quest code (`PacketSender`); #1647.
 - **open** Transcript pronoun placeholders show literally: "[He is/She is/They are]" in Daero's
   hangar briefing, "[him/her/them]" in Waydar's Lumdo menu and in Caranock's line in the chapter 4
   cutscene. Shared dialogue runtime or dumper.
-- **open** The jail only happens once. In live a human approaching the Bamboo Gate is knocked out and
-  jailed every time; here the gate later opens for a human (a gap the plugin documents). The Shortest
-  Path data marks the gate as needing Monkey Madness II.
 - **open** The hangar sliding puzzle is not implemented. Operating the Reinitialisation Panel
   completes stage 5, as the plugin documents.
-- **open** The hangar Teleportation Devices (4869, 4870, Operate) do nothing; the flight to Crash
-  Island is Waydar's talk. Whether the device should work is unverified.
 - **open** Zooknock's first talk repeats its opening three lines. The Wiki transcript has the same
   repeat, so the export is faithful to it.
-- **open** `travel_to`: the Bamboo Ladder (4743 at 2803,2734) did nothing on Climb-up, and the Grand
+- **open** `travel_to`: the Grand
   Tree's Tree Doors (1967/1968) and the Stronghold gate (190) came back `blocked` even though the
   doors were already open and walkable. It has no route out of the mould cavern or from the dungeon
   to Marim, since ropes and dungeon ladders aren't in its data. Its legs name the Grand Tree ladders
@@ -78,6 +87,18 @@ Newest first. Nothing is filed as an issue yet; the fixes are in this branch's P
   tree, glider or teleport (from the first run).
 
 ## Runs
+
+### 2026-10-31 · agent · claude-opus-5-5 (focused)
+
+- **Start:** a fresh headless account set to stage 7 with the quest command and placed on Ape Atoll
+  with `::tele` (diagnostic positioning, not a playthrough), on the branch stacked on #1645.
+- **Checked:** the first valley approach jails with the newcomer line; after picking the lock, the
+  south-east ladder climbs to 2803,2733 (plane 2) and the bridge jump lands on 2806,2724. A second
+  approach jails again with a random sent-back line, and so does a human opening the gate from
+  inside Marim. Wielding the greegree, the gate opens to 2720,2765. In the hangar the Teleportation
+  Device lands on 2393,3466. The count lines and the stuffed monkey are covered by the route test.
+- **Not checked:** the denture house's light floor (in live it sends the player back to jail), the
+  guard patrol and the Monkey's Aunt, a jailing after the quest, and a watched client.
 
 ### 2026-10-31 · agent · claude-opus-5-5
 

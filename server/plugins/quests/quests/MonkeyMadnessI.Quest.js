@@ -53,10 +53,13 @@
  *  - "Monkey form" is the Karamjan monkey greegree equipped in the weapon slot
  *    (item 4031), checked live; the transformation itself is the Greegrees item
  *    plugin's. Monkey NPCs are not made aggressive here.
- *  - Jail: no guard patrol or re-capture (the "getting sent back to jail"
- *    counters and the 100-times reward are answered false/never played). The
- *    knock-out zone west of Marim jails the player once; the cell door opens by
- *    picking its lock.
+ *  - Jail: while the quest is in progress, a human who walks up the west valley
+ *    or opens the Bamboo Gate is knocked out and jailed, every time (the wiki's
+ *    guide: "continue north-west until you are placed in the jail cell again").
+ *    Each catch is counted for Lumo's 10/15/20/50/100-times lines and the
+ *    one-time stuffed monkey. Only monkey form passes the gate; a human leaves
+ *    Marim by the south-east bamboo ladder and the end of the bridge, or by
+ *    teleport. There is no guard patrol: the cell door opens by picking its lock.
  *  - The Monkey's Aunt catching the player and the "item on the monkey child"
  *    variant are not simulated; the child's "enough time has passed" waits are a
  *    30 second timer instead of an aunt round trip.
@@ -70,8 +73,9 @@
  *  - The wiki's "teleporting loses the monkey" rule is not enforced.
  *  - Daero (npc 2020) is an existing Grand Tree first-floor spawn; this plugin
  *    only re-sends its mm_daero transform varbit, it does not spawn a duplicate.
- *  - The quest owns four climbs (the temple trapdoor, the two underground
- *    ropes and the watchtower's top ladder). Each claim is scoped to the
+ *  - The quest owns six climbs (the temple trapdoor, the two underground
+ *    ropes, the watchtower's top ladder and both ends of the south-east bridge
+ *    ladder, which skips plane 1). Each claim is scoped to the
  *    object's own placement in the cache and to the direction the clicked
  *    option names; the climb itself is handed to the Ladders plugin with an
  *    explicit destination, so it animates and walks the collision map.
@@ -248,6 +252,8 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   const BALL_OF_WOOL_ITEM = ItemIdentifiers.BALL_OF_WOOL; // 1759
   const COINS_ITEM = ItemIdentifiers.COINS; // 995
   const DIAMOND_ITEM = ItemIdentifiers.DIAMOND; // 1601
+  const STUFFED_MONKEY_ITEM = ItemIdentifiers.STUFFED_MONKEY; // 3169, Lumo's 100-catches prize
+  const DRAGON_SQ_SHIELD_ITEM = ItemIdentifiers.DRAGON_SQ_SHIELD; // 1187
   const GLOUGH_PRICE = 200000;
 
   const SHIPYARD_GATE_IDS = new Set([
@@ -295,8 +301,19 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   // The east watchtower top ladder at 2729,2766 plane 2; ClimbLinks stops at the
   // decorative plane-1 ladder, whose adjacent landing tiles are all blocked.
   const WATCHTOWER_TOP_EAST_ID = ObjectIdentifiers.BAMBOO_LADDER_7; // 4776
+  // The south-east bridge ladder climbs from the ground straight to plane 2,
+  // where Ladders (one plane at a time) finds nothing above it.
+  const BRIDGE_LADDER_BOTTOM_ID = ObjectIdentifiers.BAMBOO_LADDER; // 4743
+  const BRIDGE_LADDER_TOP_ID = ObjectIdentifiers.BAMBOO_LADDER_2; // 4744
+  const END_OF_BRIDGE_ID = ObjectIdentifiers.END_OF_BRIDGE; // 4745, "Jump off"
+  // The hangar's exit pad: the device and the floor and corner pieces of its 3x3.
+  const TELEPORTATION_DEVICE_IDS = new Set([
+    ObjectIdentifiers.TELEPORTATION_DEVICE, // 4868
+    ObjectIdentifiers.TELEPORTATION_DEVICE_2, // 4869
+    ObjectIdentifiers.TELEPORTATION_DEVICE_3, // 4870
+  ]);
 
-  // Where those four objects stand in the cache, so a claim only fires for the
+  // Where those objects stand in the cache, so a claim only fires for the
   // object the player actually clicked and only from the plane it stands on.
   const TEMPLE_TRAPDOOR_TILE = new Location(2807, 2785, 0);
   const DENTURE_DOORWAY_TILE = new Location(2764, 2764, 0);
@@ -307,6 +324,8 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   const TEMPLE_ROPE_TILE = new Location(2808, 9201, 0);
   const MOULD_ROOM_ROPE_TILE = new Location(2764, 9165, 0);
   const WATCHTOWER_TOP_TILE = new Location(2729, 2766, 2);
+  const BRIDGE_LADDER_BOTTOM_TILE = new Location(2803, 2734, 0);
+  const BRIDGE_LADDER_TOP_TILE = new Location(2803, 2734, 2);
 
   const JUNGLE_DEMON_NPC_ID = NpcIdentifiers.JUNGLE_DEMON; // 1443
 
@@ -333,6 +352,12 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   const ZOO_PEN = new Location(2602, 3280, 0);
   const ZOO_OUTSIDE = new Location(2596, 3276, 0);
   const WATCHTOWER_KRUK_LANDING = new Location(2730, 2766, 0);
+  // Shortest Path's transport rows for the ladder, the bridge and the hangar exit.
+  const BRIDGE_TOP_LANDING = new Location(2803, 2733, 2);
+  const BRIDGE_BOTTOM_LANDING = new Location(2803, 2735, 0);
+  const BRIDGE_JUMP_LANDING = new Location(2806, 2724, 0);
+  // The wiki: "teleports player south of the Gnome Ball field between two bushes".
+  const HANGAR_EXIT_LANDING = new Location(2393, 3466, 0);
 
   const ZOO_IDS = { minX: 2594, maxX: 2612, minY: 3272, maxY: 3286 };
   // Quest Helper's jungleDemonRoom zone.
@@ -346,6 +371,12 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   // The minders walk outside the pen's fence, which has no gate; a caged player
   // talks to them through it.
   const MINDER_TALK_RANGE = 3;
+
+  // The catch count each of Lumo's "after getting caught N times" lines plays at.
+  const JAIL_COUNT_LINES = new Map([
+    [10, "rpSCo_"], [15, "2JIjG3"], [20, "KVGnoh"], [50, "k9jVap"], [100, "YoHOAf"],
+  ]);
+  const KNOCKED_OUT_MESSAGE = "You have been hit by poisoned arrows and knocked out!";
 
   const CHILD_WAIT_MS = 30000; // "enough time has passed" approximation
   const BANANAS_FOR_CHILD = 5;
@@ -373,6 +404,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   const WAYDAR_CRASH_TALK_ATTRIBUTE = "quest.monkey_madness_i.waydar-crash";
   const LUMDO_TALKS_ATTRIBUTE = "quest.monkey_madness_i.lumdo-talks";
   const JAIL_STATE_ATTRIBUTE = "quest.monkey_madness_i.jail"; // 0 never, 1 jailed, 2 escaped
+  const JAIL_COUNT_ATTRIBUTE = "quest.monkey_madness_i.jail-count"; // times caught
   const GARKOR_MET_ATTRIBUTE = "quest.monkey_madness_i.garkor-met";
   const GARKOR_ASKED_ATTRIBUTE = "quest.monkey_madness_i.garkor-asked";
   const GARKOR_DISGUISED_ATTRIBUTE = "quest.monkey_madness_i.garkor-disguised";
@@ -931,12 +963,16 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
         return attribute(player, LUMO_TALKS_ATTRIBUTE) <= 1;
       case "OJ0Xrw": // Lumo: subsequent times
         return attribute(player, LUMO_TALKS_ATTRIBUTE) > 1;
-      case "rpSCo_": // jailed 10/15/20/50/100 times
+      case "rpSCo_": // caught 10/15/20/50/100 times (the sent-back page picks them)
       case "2JIjG3":
       case "KVGnoh":
       case "k9jVap":
       case "YoHOAf":
-        return false;
+        return JAIL_COUNT_LINES.get(attribute(player, JAIL_COUNT_ATTRIBUTE)) === stepId;
+      case "FWuuCv": // Lumo's bingo: no dragon sq shield worn
+        return player.getEquipment().get(Equipment.SHIELD_SLOT)?.getId?.() !== DRAGON_SQ_SHIELD_ITEM;
+      case "AiCWc7": // Lumo's bingo: a dragon sq shield worn
+        return player.getEquipment().get(Equipment.SHIELD_SLOT)?.getId?.() === DRAGON_SQ_SHIELD_ITEM;
       case "rcHC7i": // Zooknock: before talking to Garkor
         return !flag(player, GARKOR_ASKED_ATTRIBUTE);
       case "1hF4h6": // Zooknock: after talking to Garkor
@@ -1146,6 +1182,9 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
         event.handled = true;
         clearArena(player);
         player.moveTo(ATOLL_SURFACE_LANDING);
+        return;
+      case "rB_S-V": // Lumo throws a seaweed stuffed monkey corpse (100 catches)
+        giveReward(player, STUFFED_MONKEY_ITEM, 1);
         return;
       case "iKXnuQ": // "Congratulations! Quest complete!"
         event.handled = true;
@@ -1557,9 +1596,26 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     }
     if (BAMBOO_GATE_IDS.has(objectId) && option === "Open") {
       event.handled = true;
+      // Only a monkey passes the gate (wiki, Bamboo Gate); a human is shot down.
+      if (guardedFrom(player)) {
+        sendToJail(player);
+        return;
+      }
       // stepThrough suits a one-tile door; across this wide gate it would land
       // the player on the gate row, walled in beside the leaves.
       player.moveTo(player.getLocation().getY() >= BAMBOO_GATE_NORTH.getY() ? BAMBOO_GATE_SOUTH : BAMBOO_GATE_NORTH);
+      return;
+    }
+    if (objectId === END_OF_BRIDGE_ID && option === "Jump off") {
+      event.handled = true;
+      // A one-way drop from the bridge to the south-east of the island (wiki, End of bridge).
+      player.moveTo(BRIDGE_JUMP_LANDING);
+      return;
+    }
+    if (TELEPORTATION_DEVICE_IDS.has(objectId) && option === "Operate") {
+      event.handled = true;
+      // The hangar's exit (wiki, Teleportation Device).
+      player.moveTo(HANGAR_EXIT_LANDING);
       return;
     }
     if (TEMPLE_TRAPDOOR_IDS.has(objectId) && (option === "Open" || option === "Climb-down")) {
@@ -1578,9 +1634,10 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   }
 
   /**
-   * Ladders asks who owns a climb before guessing. These four objects have no
+   * Ladders asks who owns a climb before guessing. These objects have no
    * ladder at their far end (a trapdoor over a ledge, a rope to the surface, a
-   * ladder whose plane below is solid), so the quest owns the click. The claim
+   * ladder whose plane below is solid, a ladder that skips a plane), so the
+   * quest owns the click. The claim
    * is scoped to the object's own placement and to the direction the clicked
    * option names, and the climb itself is handed to the Ladders plugin with an
    * explicit destination, so it animates and walks the collision map.
@@ -1613,6 +1670,18 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
       if (direction !== "down") return;
       request.handled = true;
       climbTo(request, "ladders:climbDown", WATCHTOWER_KRUK_LANDING);
+      return;
+    }
+    if (request.objectId === BRIDGE_LADDER_BOTTOM_ID && atTile(location, BRIDGE_LADDER_BOTTOM_TILE)) {
+      if (direction !== "up") return;
+      request.handled = true;
+      climbTo(request, "ladders:climbUp", BRIDGE_TOP_LANDING);
+      return;
+    }
+    if (request.objectId === BRIDGE_LADDER_TOP_ID && atTile(location, BRIDGE_LADDER_TOP_TILE)) {
+      if (direction !== "down") return;
+      request.handled = true;
+      climbTo(request, "ladders:climbDown", BRIDGE_BOTTOM_LANDING);
     }
   }
 
@@ -1770,13 +1839,40 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     request.handled = true;
   }
 
-  function handleJailZone({ player }) {
-    if (stageOf(player) < STAGE_ATOLL) return;
-    if (monkeyForm(player)) return;
-    if (attribute(player, JAIL_STATE_ATTRIBUTE) !== 0) return;
+  /** The monkey archers guard Marim against humans while the quest is in progress. */
+  function guardedFrom(player) {
+    const stage = stageOf(player);
+    return stage >= STAGE_ATOLL && stage < STAGE_COMPLETE && !monkeyForm(player);
+  }
+
+  /**
+   * The sent-back page's random block ends every option, so its "after getting
+   * caught N times" conditions are never reached as exported: play the matching
+   * count's condition on its own, otherwise the random block.
+   */
+  function sentBackSteps(player) {
+    const countStep = JAIL_COUNT_LINES.get(attribute(player, JAIL_COUNT_ATTRIBUTE));
+    return (steps) => steps.filter((step) => (countStep ? step.id === countStep : step.type === "random"));
+  }
+
+  /** Knocked out by the archers and carried to the cell, every time. */
+  function sendToJail(player) {
+    // Saves from before the count record their one jailing in the jail state only.
+    const before = attribute(player, JAIL_COUNT_ATTRIBUTE) || (attribute(player, JAIL_STATE_ATTRIBUTE) > 0 ? 1 : 0);
+    const caught = before + 1;
+    player.setAttribute(JAIL_COUNT_ATTRIBUTE, caught);
     player.setAttribute(JAIL_STATE_ATTRIBUTE, 1);
-    startTranscript(api, player, NpcIdentifiers.LUMO_3, PAGE, "chapter-2-approaching-the-bamboo-gate");
     player.moveTo(JAIL_CELL);
+    if (caught === 1) {
+      startTranscript(api, player, NpcIdentifiers.LUMO_3, PAGE, "chapter-2-approaching-the-bamboo-gate");
+      return;
+    }
+    player.sendMessage(KNOCKED_OUT_MESSAGE);
+    startTranscript(api, player, NpcIdentifiers.LUMO_3, PAGE, "chapter-2-getting-sent-back-to-jail", sentBackSteps(player));
+  }
+
+  function handleJailZone({ player }) {
+    if (guardedFrom(player)) sendToJail(player);
   }
 
   function handleNpcDeath(event) {
@@ -1952,6 +2048,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   // ==========================================================================
 
   for (const attributeKey of PERSISTED_ATTRIBUTES) api.persistAttribute(attributeKey);
+  api.persistAttribute(JAIL_COUNT_ATTRIBUTE, 0);
   api.persistAttribute(NARNODE_HELPER_ATTRIBUTE, 0);
   api.persistAttribute(CARANOCK_HELPER_ATTRIBUTE, 0);
   api.persistAttribute(GARKOR_HELPER_ATTRIBUTE, 0);
