@@ -884,14 +884,20 @@ export class CombatFactory {
             return;
         }
 
+        // Defensive reactions are read on the impact tick, not when the attack was rolled,
+        // and before target-side consumers such as Nightmare Zone absorption spend the hit.
+        CombatFactory.applyHitTimeDefences(qHit);
+
         // Before target takes damage, manipulate the hit to handle last-second effects.
         let resolvedHit = target.manipulateHit(qHit);
         if (!resolvedHit) {
             return;
         }
-
-        // Defensive reactions are read on the impact tick, not when the attack was rolled.
-        CombatFactory.applyHitTimeDefences(resolvedHit);
+        // A replacement producer (Scurrius' landing bolt) returns a fresh hit; defend that
+        // one too, because the placeholder's defences belong to the discarded hit.
+        if (resolvedHit !== qHit) {
+            CombatFactory.applyHitTimeDefences(resolvedHit);
+        }
 
         const method = resolvedHit.getCombatMethod();
         const combatType = resolvedHit.getCombatType();
