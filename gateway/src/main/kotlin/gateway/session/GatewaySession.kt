@@ -248,6 +248,7 @@ class GatewaySession(
             if (state != State.AWAITING_SCENE) return
             enterGame(tile)
         }
+        followScene(tile)
         val reader = BlockReader(frame.updateBlocks)
         val blocks = frame.updateIndices.associateWith { ActorBlocks.player(reader) }
         mirror?.applyPlayers(frame, blocks)
@@ -256,6 +257,22 @@ class GatewaySession(
             val at = frame.tiles[index] ?: continue
             players.moveTo(index, at.x + move.endX, at.z + move.endZ)
         }
+    }
+
+    /**
+     * tsps sends no rebuild inside a private area on the real map (a raid's own copy of it, like
+     * the Fractured Archive): the browser streams the map itself. The official client only has
+     * its scene, so the player walks off it. The gateway rebuilds by tsps's own rule instead:
+     * a scene centred on the player once they are within [SCENE_EDGE_TILES] of its edge.
+     */
+    private fun followScene(tile: PlayerSync.Tile) {
+        val scene = scene as? MapRebuild.Normal ?: return
+        if (boats.deckAt(tile.x, tile.z) != null) return
+        val localX = tile.x - ((scene.zoneX - SCENE_RADIUS_ZONES) shl 3)
+        val localZ = tile.z - ((scene.zoneZ - SCENE_RADIUS_ZONES) shl 3)
+        val inside = SCENE_EDGE_TILES until SCENE_TILES - SCENE_EDGE_TILES
+        if (localX in inside && localZ in inside) return
+        onRebuild(MapRebuild.Normal(tile.x ushr 3, tile.z ushr 3))
     }
 
     private fun onChat(chat: TspsChatMessage) {
@@ -419,6 +436,10 @@ class GatewaySession(
         const val BOAT_RENDER_DISTANCE = 40
         const val PING_INTERVAL_MS = 5_000L
         const val SCENE_RADIUS_ZONES = 6
+        const val SCENE_TILES = 104
+
+        /** tsps moves the scene once the player is this close to its edge (PlayerSession). */
+        const val SCENE_EDGE_TILES = 16
 
         /** One client cycle. */
         const val CLIENT_POLL_MS = 20L
