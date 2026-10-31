@@ -207,21 +207,28 @@ export function getSequenceForcedPriority(id: number): number {
 }
 
 /**
- * How long an animation holds the actor, and whether it holds their actions too.
+ * How long an animation stays on screen, and whether the client withholds the actor's steps
+ * while it plays.
  *
- * The client decides both from the same config: `SeqType.post()` turns an unset priority into
- * 0 (steps withheld) unless the sequence carries masks, and 1 is its "drop me on a step"
- * marker. Deriving it here too means the server never locks a player the client would let
- * move, or frees one the client is still holding. Wiki: Animation stall.
+ * `holdsSteps` is the client's own condition (PlayerEcs/NpcEcs.isActionSequenceBlockingMovement):
+ * a priority of 0 withholds steps while stationary, `precedenceAnimating` 0 while already moving,
+ * and `SeqType.post()` derives 0 from an unset value unless the sequence carries masks. This is a
+ * *visual* hold only - the server keeps walking the true tile, so the animation plays over a tile
+ * that has already moved and the client catches up when it ends. That is the Wiki's partial
+ * stall. A full stall (no movement or actions at all) is content, not seq config, and is never
+ * derived here: AnimationStalls.plugin.js promotes a row to it. Core uses `ticks` only; the
+ * step fields describe what the client does with the same seq. Wiki: Animation stall.
  */
-export function getSequenceStall(id: number): { ticks: number; blocks: boolean; cancelsOnStep: boolean } {
+export function getSequenceStall(
+    id: number,
+    moving = false
+): { ticks: number; holdsSteps: boolean; cancelsOnStep: boolean } {
     const definition = decodeSequence(id);
-    const priority = definition.priority === -1
-        ? (definition.masked ? 2 : 0)
-        : definition.priority;
+    const derive = (value: number): number => value === -1 ? (definition.masked ? 2 : 0) : value;
+    const priority = derive(definition.priority);
     return {
         ticks: Math.ceil(definition.clientCycles / CLIENT_CYCLES_PER_TICK),
-        blocks: priority === 0,
+        holdsSteps: (moving ? derive(definition.movementPriority) : priority) === 0,
         cancelsOnStep: priority === 1,
     };
 }

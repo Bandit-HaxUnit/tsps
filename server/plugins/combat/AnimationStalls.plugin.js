@@ -3,10 +3,11 @@
  *
  * Core measures every swing from the cache itself: NpcAnimationScanner.getSequenceStall reads
  * the seq config the client uses to decide whether it withholds the actor's steps while the
- * animation plays, so a stalling attack animation needs no row here. This plugin is the layer
- * for the attacks that config cannot express — the Wiki's own list is explicitly not
- * exhaustive, and a weapon whose seq carries masks looks free to the client even when live
- * locks the player.
+ * animation plays. A seq that withholds them is a partial stall, so it needs no row here: the
+ * server keeps walking the true tile and the client rubber-bands when the animation ends. This
+ * plugin is the layer for full stalls the config cannot express - the Wiki's own list is
+ * explicitly not exhaustive, and a weapon whose seq carries masks looks free to the client even
+ * when live locks the player.
  *
  * Rows live in data/animation-stalls.json, keyed by animation id or by wielded weapon id.
  *
