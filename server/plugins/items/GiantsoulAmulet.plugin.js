@@ -14,6 +14,9 @@
 const MAX_CHARGES = 16000;
 const CHARGES_META_KEY = "giantsoul-amulet:charges";
 const WILDERNESS_LEVEL = 20;
+// Cache params for equipment actions, shared with Jewellery.plugin.js.
+const WORN_OPTION_PARAM = 451;
+const FIRST_WORN_OPTION_CLICK = 2;
 
 const LAIRS = [
   { label: "Bryophyta's lair", wornOption: "bryophyta", tile: [3174, 9900, 0] },
@@ -161,7 +164,11 @@ function check(player, amulet) {
 
 function itemAction(event) {
   if (!isAmulet(event.itemId) || !event.item) return;
-  const option = String(event.option ?? "").toLowerCase();
+  let optionName = event.option;
+  if (!optionName && event.interfaceId === core.Equipment.INVENTORY_INTERFACE_ID && event.clickType >= FIRST_WORN_OPTION_CLICK) {
+    optionName = core.CacheDefinitions.getItem(event.itemId)?.params?.get(WORN_OPTION_PARAM + event.clickType - FIRST_WORN_OPTION_CLICK);
+  }
+  const option = String(optionName ?? "").toLowerCase();
   const { player, item } = event;
   const lair = LAIRS.find((entry) => entry.wornOption === option);
   if (option === "charge") charge(player, item);

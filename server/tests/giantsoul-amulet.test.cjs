@@ -196,3 +196,40 @@ test('Rub cannot teleport using an item detached while its native prompt was ope
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [before.getX(), before.getY()]);
   assert.equal(Giantsoul._test.charges(player.getEquipment().getItems()[core.Equipment.AMULET_SLOT]), 2);
 });
+
+
+test('native worn IF_BUTTON packets resolve cache destinations and Check instead of removing the amulet', async () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { ClientConnection } = require('../dist/net/NetworkBuilder');
+  const { decodeClientPackets } = require('../dist/net/protocol/ClientProtocol');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  // widgets.ts writes only the widget, slot and item: no option text crosses this boundary.
+  for (const [index, opcode] of [25, 31, 63, 69].entries()) {
+    const player = new Player({ sendClientPacket() {} });
+    const item = amulet(2);
+    player.getEquipment().setItem(core.Equipment.AMULET_SLOT, item);
+    const channel = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true,
+      send: () => true, close() {}, onData() {}, onError() {}, onClose() {} };
+    const connection = new ClientConnection(channel);
+    connection.player = player;
+    const frame = Buffer.alloc(9);
+    frame[0] = opcode;
+    frame.writeInt32BE((387 << 16) | 17, 1);
+    frame.writeUInt16BE(0xffff, 5);
+    frame.writeUInt16BE(item.getId(), 7);
+    const packets = decodeClientPackets(frame);
+    assert.equal(packets[0].option, undefined);
+    connection.inject(packets);
+    await connection.idle();
+    connection.processTurnPackets();
+    assert.equal(player.getEquipment().getItems()[core.Equipment.AMULET_SLOT], item, 'a destination or Check must not unequip');
+    if (index < 3) {
+      for (let tick = 0; tick < 7; tick++) TaskManager.process();
+      assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], Giantsoul._test.LAIRS[index].tile.slice(0, 2));
+      assert.equal(Giantsoul._test.charges(item), 1);
+    } else {
+      assert.equal(player.isTeleportingReturn(), false);
+      assert.equal(Giantsoul._test.charges(item), 2);
+    }
+  }
+});
