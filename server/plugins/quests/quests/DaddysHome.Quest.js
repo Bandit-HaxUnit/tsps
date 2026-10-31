@@ -872,14 +872,21 @@ module.exports = function registerDaddysHomeQuest(api) {
     if (event.itemId !== MARLOS_CRATE) return false;
     const { player, item, slot } = event;
     if (inventory(player).get(slot) !== item) return false;
+    // A full-bag completion or Marlo's replacement can leave more than one physical crate in
+    // play. Only the first one ever pays; later copies are consumed without contents.
+    if (Number(player.getAttribute(CRATE_OPENED_ATTRIBUTE)) === 1) {
+      if (!inventory(player).deleteAtSlot(slot, 1)) return true;
+      player.sendMessage("You have already opened Marlo's crate.");
+      return true;
+    }
     // Opening the crate frees the slot it occupies.
     const needed = Math.max(0, crateSlotsNeeded(player) - 1);
     if (inventory(player).getFreeSlots() < needed) {
       return player.sendMessage(`You need ${needed} free inventory slots to open Marlo's crate.`), true;
     }
     if (!inventory(player).deleteAtSlot(slot, 1)) return true;
-    for (const [itemId, amount] of CRATE_CONTENTS) inventory(player).adds(itemId, amount);
     player.setAttribute(CRATE_OPENED_ATTRIBUTE, 1);
+    for (const [itemId, amount] of CRATE_CONTENTS) inventory(player).adds(itemId, amount);
     player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
       new ItemStatementDialogue(0, MARLOS_CRATE,
         "You open Marlo's crate and take out the Construction supplies inside."),

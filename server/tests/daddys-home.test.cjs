@@ -13,6 +13,7 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { Inventory } = require('../dist/game/model/container/impl/Inventory');
 const { Item } = require('../dist/game/model/Item');
+const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const runtime = require('../plugins/quests/QuestRuntime');
@@ -357,6 +358,59 @@ test("Marlo's crate opens into the Wiki contents", () => {
   assert.equal(player.getInventory().getAmount(ItemIdentifiers.BOLT_OF_CLOTH_2), 8);
   assert.equal(player.getInventory().getAmount(ItemIdentifiers.TELEPORT_TO_HOUSE), 5);
   assert.equal(player.getInventory().getAmount(ItemIdentifiers.FALADOR_TELEPORT), 1);
+});
+
+test('a full-bag completion, replacement and two crates pay the reward only once', () => {
+  const player = createPlayer();
+  const dropped = [];
+  const originalRegisters = ItemOnGroundManager.registers;
+  ItemOnGroundManager.registers = (_player, item) => {
+    dropped.push(item.clone());
+    return null;
+  };
+  try {
+    quest.setStage(player, 10);
+    give(player, ItemIdentifiers.SHARK, 28); // full inventory
+    quest.complete(player);
+    const groundCrates = dropped.filter((item) => item.getId() === MARLOS_CRATE);
+    assert.equal(groundCrates.length, 1, 'the completion crate is forced to the ground');
+
+    // Free one slot and ask Marlo before picking up the original.
+    player.getInventory().deleteNumber(ItemIdentifiers.SHARK, 1);
+    const replacement = talkTo(player, api.core.NpcIdentifiers.MARLO);
+    assert.equal(replacement.handled, true);
+    runAction(player);
+    assert.equal(player.getInventory().getAmount(MARLOS_CRATE), 1, 'Marlo hands out a replacement');
+
+    // Collect the original too: two physical crates now exist.
+    player.getInventory().deleteNumber(ItemIdentifiers.SHARK, 1);
+    player.getInventory().add(groundCrates[0], false);
+    assert.equal(player.getInventory().getAmount(MARLOS_CRATE), 2);
+
+    // Two crates at once, both opened through the real item handler.
+    player.getInventory().deleteNumber(ItemIdentifiers.SHARK, 6);
+    for (let index = 0; index < 2; index++) {
+      const slot = player.getInventory().getItems().findIndex((item) => item?.getId?.() === MARLOS_CRATE);
+      assert.ok(slot >= 0, `crate ${index + 1} is still present`);
+      const item = player.getInventory().get(slot);
+      const handled = handlers.namedItems.get("Marlo's crate").Open({
+        player, item, itemId: MARLOS_CRATE, slot,
+      });
+      assert.equal(handled, true);
+    }
+
+    assert.equal(player.getInventory().getAmount(MARLOS_CRATE), 0, 'both crates are consumed');
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.PLANK_2), 25);
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.MITHRIL_NAILS), 50);
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.STEEL_BAR_2), 5);
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.OAK_PLANK_2), 10);
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.BOLT_OF_CLOTH_2), 8);
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.TELEPORT_TO_HOUSE), 5);
+    assert.equal(player.getInventory().getAmount(ItemIdentifiers.FALADOR_TELEPORT), 1);
+    assert.equal(player.getAttribute('daddys-home:crate-opened'), 1);
+  } finally {
+    ItemOnGroundManager.registers = originalRegisters;
+  }
 });
 
 test('login resends every furniture bit from the saved state', () => {
