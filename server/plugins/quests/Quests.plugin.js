@@ -60,6 +60,9 @@ const QUESTS = [
   "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
   "WhatLiesBelow", "WitchsHouse", "WitchsPotion", "XMarksTheSpot",
   "ZogreFleshEaters",
+  // Enter the Abyss shares the Mage of Zamorak with Temple of the Eye and Wanted.
+  // Registering it last lets their own stage windows claim the shared NPC first.
+  "EnterTheAbyss",
 ]
 
 // Free-to-play quests (OSRS wiki); the rest stay unloaded on a free-to-play world.

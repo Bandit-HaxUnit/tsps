@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-186 quests · ✅ passed: 31 · ⚠️ passed with issues: 22 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 7 · untested: 120
+187 quests · ✅ passed: 31 · ⚠️ passed with issues: 22 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 7 · untested: 121
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -59,6 +59,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Elemental Workshop II](elemental-workshop-ii/README.md) | untested |  |  |  |  |
 | [Enakhra's Lament](enakhras-lament/README.md) | untested |  |  |  |  |
 | Enlightened Journey | untested |  |  |  |  |
+| Enter the Abyss | untested |  |  |  |  |
 | [Ernest the Chicken](ernest-the-chicken/README.md) | ✅ passed | 2026-10-25 | community |  |  |
 | [Ethically Acquired Antiquities](ethically-acquired-antiquities/README.md) | untested |  |  |  |  |
 | Fairytale I - Growing Pains | untested |  |  |  |  |
