@@ -47,7 +47,7 @@ function inventoryFixture(initial = new Map(), freeSlots = 28) {
   };
 }
 
-function playerFixture({ inventory = inventoryFixture(), hands = null, head = null, weapon = null } = {}) {
+function playerFixture({ inventory = inventoryFixture(), hands = null, head = null, weapon = null, thieving = 99 } = {}) {
   const attributes = new Map();
   const messages = [];
   const varbits = new Map();
@@ -87,7 +87,8 @@ function playerFixture({ inventory = inventoryFixture(), hands = null, head = nu
     }),
     getSkillManager: () => ({
       getCombatLevel: () => 99,
-      getMaxLevel: () => 99,
+      getCurrentLevel: () => thieving,
+      getMaxLevel: () => thieving,
       addExperiences(skill, amount) { experiences.push({ skill, amount }); },
     }),
     getLocation: () => location,
@@ -115,8 +116,11 @@ function registerQuestPlugin() {
   const before = {
     interaction: PluginManager.npcInteractionHooks.length,
     objectInteraction: PluginManager.objectInteractionHooks.length,
+    objectOrder: PluginManager.nextObjectHookOrder,
     itemOnObject: PluginManager.itemOnObjectHooks.length,
     itemOnNpc: PluginManager.itemOnNpcHooks.length,
+    itemAction: PluginManager.itemActionHooks.length,
+    itemOnItem: PluginManager.itemOnItemHooks.length,
     npcDeath: PluginManager.npcDeathHooks.length,
     condition: PluginManager.npcDialogueConditionHooks.length,
     login: PluginManager.loginHooks.length,
@@ -124,11 +128,16 @@ function registerQuestPlugin() {
   const pluginName = 'TheFeudTest';
   const spawned = [];
   const customEvents = new Set();
+  const namedObjectInteractions = new Map();
+  const namedNpcInteractions = new Map();
+  const namedItemOnObject = [];
+  const namedItemActions = new Map();
   const api = new Proxy({ core }, { get(target, key) {
     if (key in target) return target[key];
     if (key === 'persistAttribute') return () => {};
     if (key === 'onNpcInteraction') return (names, actions) => {
       const wanted = new Set([].concat(names));
+      for (const name of wanted) namedNpcInteractions.set(name, actions);
       for (const [action, handler] of Object.entries(actions ?? {})) {
         PluginManager.npcInteractionHooks.push({ pluginName, handler: (event) => {
           if (event.handled) return;
@@ -141,11 +150,37 @@ function registerQuestPlugin() {
     if (key === 'onNpcDialogueCondition') return (handler) => {
       PluginManager.npcDialogueConditionHooks.push({ pluginName, handler });
     };
-    if (key === 'onObjectInteraction') return (handler) => {
-      PluginManager.objectInteractionHooks.push({ pluginName, handler });
+    if (key === 'onObjectInteraction') return (nameOrHandler, actions) => {
+      PluginManager.nextObjectHookOrder += 1;
+      if (typeof nameOrHandler === 'function') {
+        PluginManager.objectInteractionHooks.push({ pluginName, handler: nameOrHandler });
+        return;
+      }
+      namedObjectInteractions.set(nameOrHandler, actions);
+      for (const [action, handler] of Object.entries(actions ?? {})) {
+        PluginManager.objectInteractionHooks.push({ pluginName, handler: (event) => {
+          if (event.handled) return;
+          if (event.definition?.getName?.() !== nameOrHandler) return;
+          const option = event.definition.getActions?.()[event.clickType - 1];
+          if (option !== action) return;
+          if (handler(event) !== false) event.handled = true;
+        } });
+      }
     };
-    if (key === 'onItemOnObject') return (handler) => {
-      PluginManager.itemOnObjectHooks.push({ pluginName, handler });
+    if (key === 'onItemOnObject') return (...args) => {
+      if (typeof args[0] === 'function') {
+        PluginManager.itemOnObjectHooks.push({ pluginName, handler: args[0] });
+        return;
+      }
+      // Named registrations are recorded for contract checks; dispatch in these
+      // tests goes through the plugin's generic fallback.
+      namedItemOnObject.push({ item: args[0], object: args[1], handler: args[2] });
+    };
+    if (key === 'onItemAction') return (name, actions) => {
+      if (typeof name === 'string') namedItemActions.set(name, actions);
+    };
+    if (key === 'onItemOnItem') return (handler) => {
+      PluginManager.itemOnItemHooks.push({ pluginName, handler });
     };
     if (key === 'onItemOnNpc') return (handler) => {
       PluginManager.itemOnNpcHooks.push({ pluginName, handler });
@@ -177,11 +212,18 @@ function registerQuestPlugin() {
   return {
     quest,
     spawned,
+    namedObjectInteractions,
+    namedNpcInteractions,
+    namedItemOnObject,
+    namedItemActions,
     cleanup() {
       PluginManager.npcInteractionHooks.length = before.interaction;
       PluginManager.objectInteractionHooks.length = before.objectInteraction;
+      PluginManager.nextObjectHookOrder = before.objectOrder;
       PluginManager.itemOnObjectHooks.length = before.itemOnObject;
       PluginManager.itemOnNpcHooks.length = before.itemOnNpc;
+      PluginManager.itemActionHooks.length = before.itemAction;
+      PluginManager.itemOnItemHooks.length = before.itemOnItem;
       PluginManager.npcDeathHooks.length = before.npcDeath;
       PluginManager.npcDialogueConditionHooks.length = before.condition;
       PluginManager.loginHooks.length = before.login;
@@ -548,6 +590,7 @@ test('Registered handler edges cover the mandatory stage graph from the gang tal
     });
     action(player, 'KMB_VR');
     assert.equal(quest.getStage(player), 13);
+    player.inventory.adds(I.KEYS, 1);
     PluginManager.emitItemOnObject({
       player, objectId: O.DOOR_165, itemId: I.KEYS, handled: false,
     });
@@ -571,8 +614,10 @@ test('Registered handler edges cover the mandatory stage graph from the gang tal
     PluginManager.emitNpcInteraction(npcEvent(player, 'Ali the Operator'));
     assert.equal(quest.getStage(player), 18);
     PluginManager.emitNpcInteraction(npcEvent(player, 'Ali the Barman'));
+    player.inventory.adds(I.SNAKE_BASKET_FULL, 1);
     action(player, 'nEt0jL');
     assert.equal(quest.getStage(player), 19);
+    player.inventory.adds(I.UGTHANKI_DUNG, 1);
     action(player, 'TiFd_S');
     assert.equal(quest.getStage(player), 20);
     assert.equal(player.inventory.getAmount(I.HAGS_POISON), 1);
@@ -611,6 +656,284 @@ test('Registered handler edges cover the mandatory stage graph from the gang tal
     assert.deepEqual(player.experiences, [{ skill: core.Skill.THIEVING, amount: 15000 }]);
   } finally {
     worldNpcs = [];
+    cleanup();
+  }
+});
+
+const plain = (line) => String(line).replace(/<\/?str>/g, '');
+const objectiveText = [
+  'Travel to Pollnivneach and question Drunken Ali.',
+  'Infiltrate the Pollnivneach gangs and complete the blackjack and Thieving tasks.',
+  "Enter the mayor's house in the desert disguise and steal the jewels.",
+];
+
+test('The journal lists the three objectives in order and completes them only at their stage edges', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const player = playerFixture();
+    const journal = (stage) => {
+      quest.setStage(player, stage);
+      return quest.buildJournal(player, quest);
+    };
+
+    const start = journal(0).slice(0, 3);
+    assert.deepEqual(start.map(plain), objectiveText);
+    assert.ok(start.every((line) => !line.startsWith('<str>')), 'nothing is complete before the quest starts');
+
+    const travelled = journal(2).slice(0, 3);
+    assert.equal(travelled[0], `<str>${objectiveText[0]}</str>`);
+    assert.equal(travelled[1], objectiveText[1]);
+    assert.equal(travelled[2], objectiveText[2]);
+
+    const gang = journal(12).slice(0, 3);
+    assert.equal(gang[0], `<str>${objectiveText[0]}</str>`);
+    assert.equal(gang[1], `<str>${objectiveText[1]}</str>`);
+    assert.equal(gang[2], objectiveText[2]);
+
+    const jewels = journal(15).slice(0, 3);
+    assert.deepEqual(jewels, objectiveText.map((text) => `<str>${text}</str>`));
+
+    const complete = journal(28).slice(0, 3);
+    assert.deepEqual(complete, objectiveText.map((text) => `<str>${text}</str>`));
+  } finally {
+    cleanup();
+  }
+});
+
+test('The start conversation refuses to advance below 30 Thieving', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const hook = (player) => PluginManager.emitCustomEvent('npc-dialogue:hook', {
+      hook: 'quest:the-feud:start', npcId: core.NpcIdentifiers.ALI_MORRISANE, player,
+    });
+
+    const low = playerFixture({ thieving: 29 });
+    hook(low);
+    assert.equal(quest.getStage(low), 0);
+    assert.ok(low.messages.some((message) => message.includes('30')));
+
+    const ready = playerFixture({ thieving: 30 });
+    hook(ready);
+    assert.equal(quest.getStage(ready), 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test('Early objectives cannot be completed out of order', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const I = core.ItemIdentifiers;
+    const O = core.ObjectIdentifiers;
+
+    // Camels are bought only after both gang talks.
+    const camelBuyer = playerFixture({
+      inventory: inventoryFixture(new Map([[I.COINS, 500]])),
+    });
+    quest.setStage(camelBuyer, 2);
+    action(camelBuyer, '1JYri1');
+    assert.equal(quest.getStage(camelBuyer), 2, 'the camel purchase needs STAGE_GANGS');
+    assert.equal(camelBuyer.inventory.getAmount(I.COINS), 500);
+    assert.equal(camelBuyer.inventory.getAmount(I.RECEIPT), 0);
+    quest.setStage(camelBuyer, 3);
+    action(camelBuyer, '1JYri1');
+    assert.equal(quest.getStage(camelBuyer), 4);
+    assert.equal(camelBuyer.inventory.getAmount(I.RECEIPT), 2);
+
+    // A receipt cannot be handed over before the camel receipts exist.
+    const receipt = playerFixture({
+      inventory: inventoryFixture(new Map([[I.RECEIPT, 1]])),
+    });
+    quest.setStage(receipt, 3);
+    action(receipt, '-Jb-bz');
+    assert.equal(quest.getStage(receipt), 3);
+    assert.equal(receipt.inventory.getAmount(I.RECEIPT), 1, 'the out-of-order hand-in consumes nothing');
+
+    // The blackjack is handed out only after the two pockets.
+    const blackjack = playerFixture();
+    quest.setStage(blackjack, 7);
+    action(blackjack, 'S1K0jh');
+    assert.equal(quest.getStage(blackjack), 7);
+    assert.equal(blackjack.inventory.getAmount(I.OAK_BLACKJACK), 0);
+    quest.setStage(blackjack, 8);
+    action(blackjack, 'S1K0jh');
+    assert.equal(quest.getStage(blackjack), 9);
+    assert.equal(blackjack.inventory.getAmount(I.OAK_BLACKJACK), 1);
+
+    // Joining the gang is its own step: robbing before it does not advance.
+    const joined = playerFixture();
+    quest.setStage(joined, 5);
+    PluginManager.emitNpcInteraction(npcEvent(joined, 'Villager', 'Pickpocket'));
+    assert.equal(quest.getStage(joined), 5);
+
+    // The stake-out needs gloves and the disguise.
+    const staking = playerFixture();
+    quest.setStage(staking, 12);
+    action(staking, 'KMB_VR');
+    assert.equal(quest.getStage(staking), 12);
+    const disguised = playerFixture({ hands: 1059, head: I.DESERT_DISGUISE });
+    quest.setStage(disguised, 12);
+    action(disguised, 'KMB_VR');
+    assert.equal(quest.getStage(disguised), 13);
+
+    // The door needs the keys and the correct stage.
+    const door = playerFixture();
+    quest.setStage(door, 13);
+    action(door, 'sxI5_2');
+    assert.equal(quest.getStage(door), 13);
+    door.inventory.adds(I.KEYS, 1);
+    action(door, 'sxI5_2');
+    assert.equal(quest.getStage(door), 14);
+
+    const lockedDoor = playerFixture();
+    quest.setStage(lockedDoor, 12);
+    const earlyDoor = {
+      player: lockedDoor, objectId: O.DOOR_165, object: {}, clickType: 1, handled: false,
+      definition: { getName: () => 'Door', getActions: () => ['Open', null, null, null, null] },
+    };
+    PluginManager.emitObjectInteraction(earlyDoor);
+    assert.equal(earlyDoor.handled, true, 'the mayor door stays locked before the stake-out');
+    assert.ok(lockedDoor.messages.some((message) => message.includes('locked')));
+
+    // The safe's jewels only come from the interior stage.
+    const safe = playerFixture();
+    quest.setStage(safe, 13);
+    action(safe, 'Tj1PIq');
+    assert.equal(quest.getStage(safe), 13);
+    assert.equal(safe.inventory.getAmount(I.JEWELS), 0);
+    quest.setStage(safe, 14);
+    action(safe, 'Tj1PIq');
+    assert.equal(quest.getStage(safe), 15);
+    assert.equal(safe.inventory.getAmount(I.JEWELS), 1);
+
+    // The jewels hand-in needs them in the inventory.
+    const jewels = playerFixture();
+    quest.setStage(jewels, 14);
+    action(jewels, '9K8uBx');
+    assert.equal(quest.getStage(jewels), 14);
+    jewels.inventory.adds(I.JEWELS, 1);
+    quest.setStage(jewels, 15);
+    action(jewels, '9K8uBx');
+    assert.equal(quest.getStage(jewels), 16);
+    assert.equal(jewels.inventory.getAmount(I.JEWELS), 0);
+
+    // The champion and the final reward refuse later/earlier stages.
+    const champion = playerFixture();
+    quest.setStage(champion, 24);
+    PluginManager.emitNpcDeath({ killer: champion, npcId: core.NpcIdentifiers.BANDIT_CHAMPION });
+    assert.equal(quest.getStage(champion), 24);
+    assert.equal(champion.inventory.getAmount(I.ADAMANT_SCIMITAR), 0);
+    quest.setStage(champion, 25);
+    PluginManager.emitNpcDeath({ killer: champion, npcId: core.NpcIdentifiers.BANDIT_CHAMPION });
+    assert.equal(quest.getStage(champion), 26);
+
+    const finisher = playerFixture();
+    quest.setStage(finisher, 26);
+    action(finisher, '_jFbux');
+    assert.equal(quest.getStage(finisher), 26);
+    assert.equal(quest.isComplete(finisher), false);
+    quest.setStage(finisher, 27);
+    action(finisher, '_jFbux');
+    assert.equal(quest.getStage(finisher), 28);
+    assert.equal(quest.isComplete(finisher), true);
+  } finally {
+    worldNpcs = [];
+    cleanup();
+  }
+});
+
+test('The Feud registers named NPC, object, item and item-on-object interactions', () => {
+  const { namedNpcInteractions, namedObjectInteractions, namedItemOnObject, namedItemActions, cleanup } = registerQuestPlugin();
+  try {
+    for (const name of ['Ali Morrisane', 'Drunken Ali', 'Bandit', 'Menaphite Thug', 'Rug Merchant', 'Villager']) {
+      assert.ok(namedNpcInteractions.has(name), `${name} is registered by name`);
+    }
+    assert.ok(namedNpcInteractions.get('Villager')['Knock-Out']);
+    assert.ok(namedNpcInteractions.get('Villager').Lure);
+
+    assert.ok(namedObjectInteractions.get('Cactus')['Hide-behind']);
+    assert.ok(namedObjectInteractions.get('Study desk').Search);
+    assert.ok(namedObjectInteractions.get('Bed').Search);
+    assert.ok(namedObjectInteractions.get('Landscape').Search);
+    assert.ok(namedObjectInteractions.get('Door').Open);
+    assert.ok(namedObjectInteractions.get('Dung')['Pick-up']);
+
+    assert.ok(namedItemOnObject.some((entry) => entry.item === 'Coins' && entry.object === 'Money Pot'));
+    assert.ok(namedItemOnObject.some((entry) => entry.item === 'Red hot sauce' && entry.object === 'Trough'));
+    assert.ok(namedItemOnObject.some((entry) => entry.item === 'Bucket' && entry.object === 'Dung'));
+    assert.ok(namedItemOnObject.some((entry) => entry.item === 'Hag\'s poison' && entry.object === 'Table'));
+    assert.ok(namedItemOnObject.some((entry) => entry.item === 'Keys' && entry.object === 'Door'));
+
+    assert.ok(namedItemActions.get('Oak blackjack').Wield);
+    assert.ok(namedItemActions.get('Willow blackjack').Wield);
+    assert.ok(namedItemActions.get('Desert disguise').Wear);
+    assert.ok(namedItemActions.get('Snake charm').Play);
+  } finally {
+    cleanup();
+  }
+});
+
+test('The desert disguise is rebuilt without duplication and quest leftovers are cleaned up', () => {
+  const { quest, cleanup } = registerQuestPlugin();
+  try {
+    const I = core.ItemIdentifiers;
+    const player = playerFixture({
+      inventory: inventoryFixture(new Map([
+        [I.KHARIDIAN_HEADPIECE, 1], [I.FAKE_BEARD, 1],
+      ])),
+    });
+
+    PluginManager.emitItemOnItem({
+      player, usedItemId: I.KHARIDIAN_HEADPIECE, usedWithItemId: I.FAKE_BEARD, handled: false,
+    });
+    assert.equal(player.inventory.getAmount(I.DESERT_DISGUISE), 1);
+    assert.equal(player.inventory.getAmount(I.KHARIDIAN_HEADPIECE), 0);
+    assert.equal(player.inventory.getAmount(I.FAKE_BEARD), 0);
+
+    // A second pair while the disguise is carried does not duplicate or consume it.
+    player.inventory.adds(I.KHARIDIAN_HEADPIECE, 1);
+    player.inventory.adds(I.FAKE_BEARD, 1);
+    PluginManager.emitItemOnItem({
+      player, usedItemId: I.KHARIDIAN_HEADPIECE, usedWithItemId: I.FAKE_BEARD, handled: false,
+    });
+    assert.equal(player.inventory.getAmount(I.DESERT_DISGUISE), 1);
+    assert.equal(player.inventory.getAmount(I.KHARIDIAN_HEADPIECE), 1);
+    assert.equal(player.inventory.getAmount(I.FAKE_BEARD), 1);
+    assert.ok(player.messages.some((message) => message.includes('already have a desert disguise')));
+
+    // Completion keeps the rewards and destroys the quest-only leftovers.
+    const completed = playerFixture({
+      inventory: inventoryFixture(new Map([
+        [I.KEYS, 1], [I.JEWELS, 1], [I.RECEIPT, 1], [I.NOTE, 1], [I.NOTE_2, 1],
+        [I.UGTHANKI_DUNG, 1], [I.HAGS_POISON, 1], [I.RED_HOT_SAUCE, 1],
+        [I.SNAKE_BASKET_FULL, 1], [I.DESERT_DISGUISE, 1], [I.OAK_BLACKJACK, 1],
+      ])),
+    });
+    quest.setStage(completed, 27);
+    action(completed, '_jFbux');
+    assert.equal(quest.getStage(completed), 28);
+    for (const itemId of [
+      I.KEYS, I.JEWELS, I.RECEIPT, I.NOTE, I.NOTE_2,
+      I.UGTHANKI_DUNG, I.HAGS_POISON, I.RED_HOT_SAUCE, I.SNAKE_BASKET_FULL,
+    ]) {
+      assert.equal(completed.inventory.getAmount(itemId), 0, `leftover ${itemId} is cleaned up`);
+    }
+    assert.equal(completed.inventory.getAmount(I.DESERT_DISGUISE), 1, 'the disguise is a reward');
+    assert.equal(completed.inventory.getAmount(I.OAK_BLACKJACK), 1, 'the blackjack is a reward');
+
+    // A save completed before this cleanup hook is cleaned on login too.
+    const oldSave = playerFixture({ inventory: inventoryFixture(new Map([[I.KEYS, 1]])) });
+    quest.setStage(oldSave, 28);
+    PluginManager.emitPlayerLogin({ player: oldSave });
+    assert.equal(oldSave.inventory.getAmount(I.KEYS), 0);
+
+    // A player who somehow reached the end without the disguise still gets the
+    // quest's disguise reward, once.
+    const noDisguise = playerFixture();
+    quest.setStage(noDisguise, 27);
+    action(noDisguise, '_jFbux');
+    assert.equal(noDisguise.inventory.getAmount(I.DESERT_DISGUISE), 1);
+  } finally {
     cleanup();
   }
 });
