@@ -571,6 +571,12 @@ function applyPreset(player, preset) {
     sender.sendMessage("You can't load a preset in the wilderness!");
     return false;
   }
+  // Inventory weapons must follow the same rules when the player switches gear later.
+  for (const item of [...(preset.getEquipment() ?? []), ...(preset.getInventory() ?? [])]) {
+    if (!isValidItem(item)) continue;
+    const slot = equipmentSlotOf(item.getId());
+    if (slot >= 0 && pluginApi?.core?.PluginManager?.emitCanEquip(player, slot, item) === false) return false;
+  }
   // Validate a custom preset's real-item requirements up front, before anything is
   // banked or cleared, so a preset you cannot yet afford is a no-op instead of a wipe.
   const nonSpawnableRequirements = [];
