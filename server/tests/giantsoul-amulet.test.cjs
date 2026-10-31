@@ -83,6 +83,7 @@ test("Rub offers the three lairs and Nowhere; worn options go straight there", (
   t.mock.method(core.TeleportHandler, 'teleport', (player, target, type, warn, onArrival) => { arrivals.push([target.getX(), target.getY()]); onArrival?.(); });
   const player = fakePlayer();
   const item = amulet(2);
+  player.amulet = item;
   const event = (option) => ({ player, item, itemId: item.getId(), option, handled: false });
   const rub = event('Rub');
   Giantsoul._test.itemAction(rub);
@@ -152,7 +153,9 @@ test('a refused teleport keeps the amulet charge', (t) => {
   t.mock.method(core.TeleportHandler, 'checkReqs', () => false);
   t.mock.method(core.TeleportHandler, 'teleport', () => assert.fail('refused teleport must not start'));
   const item = amulet(1);
-  Giantsoul._test.teleport(fakePlayer(), item, Giantsoul._test.LAIRS[0]);
+  const player = fakePlayer();
+  player.amulet = item;
+  Giantsoul._test.teleport(player, item, Giantsoul._test.LAIRS[0]);
   assert.equal(Giantsoul._test.charges(item), 1);
 });
 
@@ -173,4 +176,23 @@ test('equipping after opening the charge prompt cancels spending on the detached
   assert.equal(Giantsoul._test.charges(worn), 0);
   assert.equal(player.getInventory().getAmount(I.LAW_RUNE), 5);
   assert.equal(player.getInventory().getAmount(I.BIG_BONES_2), 5);
+});
+
+
+test('Rub cannot teleport using an item detached while its native prompt was open', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { EquipPacketListener } = require('../dist/net/packet/impl/EquipPacketListener');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  Giantsoul.register(PluginManager.createApi('GiantsoulAmulet'));
+  const player = new Player({ sendClientPacket() {} });
+  const before = player.getLocation().clone();
+  const item = amulet(2);
+  player.getInventory().setItem(0, item);
+  Giantsoul._test.itemAction({ player, item, itemId: item.getId(), option: 'Rub' });
+  EquipPacketListener.equip(player, item.getId(), 0, 3214);
+  assert.ok(MultiChatboxPrompt.getPending(player), 'Wear leaves the chatbox prompt open');
+  assert.equal(MultiChatboxPrompt.handleInterfaceActionClick({ player, buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID, action: 2 }), true);
+  assert.equal(player.isTeleportingReturn(), false, 'a stale item cannot start the teleport');
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [before.getX(), before.getY()]);
+  assert.equal(Giantsoul._test.charges(player.getEquipment().getItems()[core.Equipment.AMULET_SLOT]), 2);
 });

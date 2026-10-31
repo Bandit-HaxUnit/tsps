@@ -66,6 +66,10 @@ function chargeable(player, amulet) {
   return Math.max(0, Math.min(bonesCarried(player), laws, MAX_CHARGES - charges(amulet)));
 }
 
+function held(player, amulet) {
+  return [player.getInventory(), player.getEquipment()].some((container) => container.getItems().includes(amulet));
+}
+
 function addCharges(player, amulet, requested) {
   const amount = Math.min(Math.floor(Number(requested)) || 0, chargeable(player, amulet));
   if (amount <= 0) return;
@@ -94,7 +98,7 @@ function charge(player, amulet) {
   }
   player.setEnteredAmountAction({ execute: (amount) => {
     // A moved or equipped item may have been cloned since the prompt opened.
-    if (!player.getInventory().getItems().includes(amulet) && !player.getEquipment().getItems().includes(amulet)) return;
+    if (!held(player, amulet)) return;
     addCharges(player, amulet, amount);
   } });
   player.getPacketSender().sendEnterAmountPrompt(`How many charges would you like to add? (0 - ${most.toLocaleString("en-US")})`);
@@ -120,6 +124,7 @@ function chargeWithItems(event) {
 // ------------------------------------------------------------------ teleporting
 
 function teleport(player, amulet, lair) {
+  if (!held(player, amulet)) return;
   if (charges(amulet) <= 0) {
     player.sendMessage("You have no remaining charges in your Giantsoul amulet.");
     return;
