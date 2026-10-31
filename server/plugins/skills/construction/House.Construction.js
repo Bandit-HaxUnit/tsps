@@ -16,6 +16,7 @@ const JewelleryBox = require("./JewelleryBox.Construction");
 const Menu = require("./Menu.Construction");
 const Mounted = require("./Mounted.Construction");
 const SuperiorGarden = require("./SuperiorGarden.Construction");
+const GardenPlants = require("./GardenPlants.Construction");
 const Lectern = require("./Lectern.Construction");
 const Stairs = require("./Stairs.Construction");
 const Workshop = require("./Workshop.Construction");
@@ -844,6 +845,8 @@ function getBuildMaterials(player, house, target, buildable) {
     return "That can only be built if the hotspot is empty.";
   }
   if (target && previous && existing !== previous) return "That can only be built by upgrading the previous piece of furniture.";
+  const plantRefusal = GardenPlants.refusal(player, buildable);
+  if (plantRefusal) return plantRefusal;
   const requiredItems = new Map();
   const listed = [];
   for (const material of buildable.materials) {
@@ -926,7 +929,7 @@ function buildFurniture(player, house, target, buildable) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const materials = getBuildMaterials(player, house, target, buildable);
   if (!(materials instanceof Map)) return Menu.refuse(player, materials);
-  hammer(player, buildable.buildAnimationId);
+  if (!GardenPlants.animate(player, buildable)) hammer(player, buildable.buildAnimationId);
   const nails = buildable.materials.find(material => material.source === "NAILS")?.amount ?? 0;
   if (nails === 0) return completeFurniture(player, house, target, buildable, materials);
   let used = 0;
@@ -956,6 +959,7 @@ function buildFurniture(player, house, target, buildable) {
 function completeFurniture(player, house, target, buildable, materials) {
   useMaterials(player, buildable, materials);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
+  GardenPlants.complete(player, buildable);
   house.setFurniture(target, buildable);
   // Keyed to the house, so a click straight after the build doesn't cancel the redraw.
   TaskManager.submit(new CountdownTask(house, 1, () => {
