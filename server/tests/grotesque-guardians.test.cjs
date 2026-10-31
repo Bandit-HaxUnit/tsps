@@ -547,9 +547,10 @@ test('the kill: Dusk gives the pair 1,350 Slayer XP and the kill count; Dawn giv
 test("Dusk's kill rolls the Wiki drop table, and Noon is one 1/3,000 tertiary", () => {
   const drops = Common.data.drops;
   assert.equal(drops.rolls, 2, 'two rolls, tertiary excluded (Wiki)');
-  assert.equal(drops.main_max_roll, 142);
-  const main = drops.entries.filter((entry) => Number.isFinite(entry.weight) && !entry.separate_roll);
-  assert.equal(main.reduce((sum, entry) => sum + entry.weight, 0), 142, 'the 142-slot pool');
+  assert.equal(drops.main_max_roll, 284);
+  const main = drops.entries.filter((entry) => entry.weight !== undefined && !entry.separate_roll && !entry.always);
+  assert.ok(main.every((entry) => Number.isInteger(entry.weight)), 'rollOnce drops fractional main weights');
+  assert.equal(main.reduce((sum, entry) => sum + entry.weight, 0), 284, 'the scaled 284-slot pool');
   const noon = drops.tertiary.filter((entry) => entry.item_id === 21748);
   assert.equal(noon.length, 1);
   assert.deepEqual([noon[0].weight, noon[0].out_of], [1, 3000]);
@@ -572,6 +573,62 @@ test("Dusk's kill rolls the Wiki drop table, and Noon is one 1/3,000 tertiary", 
   assert.deepEqual(dropEvents.map((event) => event.name), ['npc-drops:roll-table', 'npc-drops:roll', 'npc-drops:place']);
   assert.equal(dropEvents[0].event.table, drops);
   flush();
+});
+
+test('the main pool is all integers, coins are 995, and every row including the tail rolls', () => {
+  const drops = Common.data.drops;
+  const main = drops.entries.filter((entry) => entry.weight !== undefined && !entry.separate_roll && !entry.always);
+  assert.ok(main.every((entry) => Number.isInteger(entry.weight)), 'rollOnce admits only integer main weights');
+  assert.equal(main.reduce((sum, entry) => sum + entry.weight, 0), drops.main_max_roll);
+
+  const { __internals } = require('../plugins/npcs/NpcDrops.plugin');
+  const player = fakePlayer();
+  const roll = (entry) => {
+    let before = 0;
+    for (const candidate of main) {
+      if (candidate === entry) break;
+      before += candidate.weight;
+    }
+    const original = Math.random;
+    Math.random = () => (before + entry.weight / 2) / drops.main_max_roll;
+    try {
+      return __internals.rollOnce({ main_max_roll: drops.main_max_roll }, main, player, true, null, []);
+    } finally {
+      Math.random = original;
+    }
+  };
+  const byName = (name) => main.find((entry) => entry.name === name);
+  const coinRows = main.filter((entry) => entry.name === 'Coins');
+  assert.equal(coinRows.length, 2);
+  assert.ok(coinRows.every((entry) => entry.item_id === 995), 'gameplay currency, not cache item 617');
+  const coinRoll = roll(coinRows[0]);
+  assert.equal(coinRoll.length, 1);
+  assert.equal(coinRoll[0].itemId, 995);
+  assert.ok(coinRoll[0].amount >= 10000 && coinRoll[0].amount <= 20000);
+
+  for (const name of ['Raw shark', 'Shark lure', 'Raw sea turtle']) {
+    const entry = byName(name);
+    assert.ok(entry, name);
+    assert.ok(roll(entry).some((drop) => drop.itemId === entry.item_id), `${name} is reachable`);
+  }
+  const tail = main.at(-1);
+  assert.equal(tail.name, 'Raw sea turtle');
+  assert.ok(roll(tail).some((drop) => drop.itemId === tail.item_id), 'the tail of the pool is not an empty slot');
+
+  // The production placement boundary: a 995 stack is one ground registration, not 15,000.
+  const registrations = [];
+  const NpcDrops = require('../plugins/npcs/NpcDrops.plugin');
+  NpcDrops.register(new Proxy({
+    core,
+    getItemOnGroundManager: () => ({
+      registerLocation: (owner, item, location) => registrations.push({ owner, item, location }),
+    }),
+    onCustomEvent() {}, onNpcDeath() {}, registerCommand() {}, log() {},
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  NpcDrops.__internals.placeDrops(player, coinRoll, player.getLocation());
+  assert.equal(registrations.length, 1, 'one currency stack');
+  assert.equal(registrations[0].item.getId(), 995);
+  assert.equal(registrations[0].item.getAmount(), coinRoll[0].amount);
 });
 
 test('both are finished with a rock hammer at 9 or below, like the gargoyles', () => {
