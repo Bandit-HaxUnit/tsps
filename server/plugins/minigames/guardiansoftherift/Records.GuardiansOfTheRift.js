@@ -51,14 +51,71 @@ function setPoints(player, elemental, catalytic) {
   player.setAttribute(CATALYTIC_POINTS_ATTRIBUTE, Math.max(0, catalytic));
 }
 
+/** Players already checked for the old inventory item this session. */
+const legacyChecked = new WeakSet();
+
+/**
+ * Before pearls were a saved balance they were the abyssal_pearl item in the inventory or bank.
+ * Move every legacy stack into the balance and take the items in the same operation, then ask
+ * persistence for one snapshot: an upgraded account keeps the currency it had earned.
+ */
+function migrateLegacyPearls(player) {
+  if (!player || legacyChecked.has(player)) return 0;
+  legacyChecked.add(player);
+  const pearl = Shared.obj(Shared.ITEM.PEARL);
+  const note = Shared.core().ItemDefinition.forId(pearl)?.getNoteId?.() ?? -1;
+  const ids = note > 0 ? [pearl, note] : [pearl];
+
+  let converted = 0;
+  const inventory = player.getInventory?.();
+  if (inventory) {
+    let removed = 0;
+    for (const id of ids) {
+      const held = Number(inventory.getAmount?.(id) ?? 0);
+      if (held <= 0) continue;
+      inventory.delete(id, held);
+      removed += held;
+    }
+    if (removed > 0) {
+      inventory.refreshItems?.();
+      converted += removed;
+    }
+  }
+
+  const searchTab = Shared.core().Bank?.BANK_SEARCH_TAB_INDEX ?? -1;
+  for (const [tab, bank] of (player.getBanks?.() ?? []).entries()) {
+    if (!bank || tab === searchTab) continue;
+    let removed = 0;
+    for (const id of ids) {
+      const held = Number(bank.getAmount?.(id) ?? 0);
+      if (held <= 0) continue;
+      bank.delete(id, held);
+      removed += held;
+    }
+    if (removed > 0) {
+      bank.refreshItems?.();
+      converted += removed;
+    }
+  }
+
+  if (converted > 0) {
+    addPearls(player, converted);
+    player.sendMessage?.(`Your ${Shared.formatNumber(converted)} abyssal pearls are now kept in your currency balance.`);
+    Shared.api().emitCustomEvent("persistence:save", { player, reason: "guardians-of-the-rift-pearl-migration" });
+  }
+  return converted;
+}
+
 function pearls(player) {
+  migrateLegacyPearls(player);
   return number(player, PEARLS_ATTRIBUTE);
 }
 
 /** Sets the balance outright: a shop's price is a target, so a retry can't take twice. */
 function setPearls(player, value) {
-  player.setAttribute(PEARLS_ATTRIBUTE, Math.max(0, Math.trunc(Number(value) || 0)));
-  return pearls(player);
+  const next = Math.max(0, Math.trunc(Number(value) || 0));
+  player.setAttribute(PEARLS_ATTRIBUTE, next);
+  return next;
 }
 
 function addPearls(player, amount) {
@@ -101,6 +158,7 @@ function setSetting(player, varbit, value) {
 }
 
 function login({ player }) {
+  migrateLegacyPearls(player);
   Shared.setVarp(player, Shared.VARP.RIFTS_CLOSED, riftsClosed(player));
   for (const [varbit, value] of Object.entries(settings(player))) Shared.setVarbit(player, varbit, Number(value) || 0);
 }
@@ -117,6 +175,7 @@ module.exports = {
   RIFTS_CLOSED_ATTRIBUTE, ELEMENTAL_POINTS_ATTRIBUTE, CATALYTIC_POINTS_ATTRIBUTE, SEARCHES_ATTRIBUTE,
   SETTINGS_ATTRIBUTE, PEARLS_ATTRIBUTE, PEARL_CURRENCY, pearlCurrency,
   riftsClosed, addRiftClosed, points, setPoints, pearls, setPearls, addPearls, spendPearls,
+  migrateLegacyPearls, login,
   searches, addSearches, setting, setSetting,
   attach(api) {
     api.persistAttribute(RIFTS_CLOSED_ATTRIBUTE, 0);

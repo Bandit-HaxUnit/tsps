@@ -213,6 +213,11 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
   return p;
 }
 
+/** A Player with a session stub, enough for inventory refreshes in a save round-trip. */
+function realPlayer() {
+  return new Player({ sendClientPacket() {} });
+}
+
 function ticks(count) {
   for (let i = 0; i < count; i++) {
     Game.tick();
@@ -461,12 +466,64 @@ test('a closed game pays pearls for contribution, and an idle spectator earns no
 
 test('the pearl balance is, and stays, a saved attribute across a relog', () => {
   assert.ok(hooks.persisted.has(Records.PEARLS_ATTRIBUTE));
-  const player = new Player(null);
+  const player = realPlayer();
   Records.setPearls(player, 37);
   const save = PlayerSave.fromPlayer(player);
-  const loaded = new Player(null);
+  const loaded = realPlayer();
   save.applyToPlayer(loaded);
   assert.equal(Records.pearls(loaded), 37);
+});
+
+test('legacy abyssal pearl items become the saved balance once, on load, in one save', () => {
+  const pearl = Shared.obj(Shared.ITEM.PEARL);
+  const legacy = realPlayer();
+  legacy.getInventory().adds(pearl, 400);
+  legacy.getBank(0).adds(pearl, 100);
+  const save = PlayerSave.fromPlayer(legacy);
+
+  const loaded = realPlayer();
+  save.applyToPlayer(loaded);
+  assert.equal(loaded.getInventory().getAmount(pearl), 400);
+  assert.equal(loaded.getBank(0).getAmount(pearl), 100);
+
+  const saves = [];
+  const listener = (event) => saves.push(event);
+  (hooks.custom['persistence:save'] ??= []).push(listener);
+  try {
+    Records.login({ player: loaded });
+  } finally {
+    hooks.custom['persistence:save'] = hooks.custom['persistence:save'].filter((handler) => handler !== listener);
+  }
+  assert.equal(Records.pearls(loaded), 500);
+  assert.equal(loaded.getInventory().getAmount(pearl), 0, 'the inventory stack is removed');
+  assert.equal(loaded.getBank(0).getAmount(pearl), 0, 'the bank stack is removed');
+  assert.equal(saves.at(-1)?.reason, 'guardians-of-the-rift-pearl-migration');
+
+  const resaved = PlayerSave.fromPlayer(loaded);
+  assert.equal(resaved.attributes[Records.PEARLS_ATTRIBUTE], 500);
+  const reloaded = realPlayer();
+  resaved.applyToPlayer(reloaded);
+  assert.equal(Records.pearls(reloaded), 500, 'the saved balance survives');
+  assert.equal(reloaded.getInventory().getAmount(pearl), 0);
+  assert.equal(reloaded.getBank(0).getAmount(pearl), 0);
+  Records.login({ player: reloaded });
+  assert.equal(Records.pearls(reloaded), 500, 'a second login cannot recredit');
+});
+
+test('a purchase path also converts legacy pearl items before reading the balance', () => {
+  const pearl = Shared.obj(Shared.ITEM.PEARL);
+  const player = realPlayer();
+  player.getInventory().adds(pearl, 400);
+  const request = {
+    player, shop: 'gotr_reward_shop_all',
+    currency: Shared.core().CacheDefinitions.getDbRowId('omnishop_currency_abyssal_pearl'),
+    balance: null, set: null,
+  };
+  Apprentices.currency(request);
+  assert.equal(request.balance, 400);
+  assert.equal(player.getInventory().getAmount(pearl), 0);
+  request.set(request.balance - 25);
+  assert.equal(Records.pearls(player), 375);
 });
 
 test('the GotR shop currency spends the saved balance once and refuses a short price', () => {

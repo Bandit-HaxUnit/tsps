@@ -417,8 +417,9 @@ Ticks from the rift opening:
   valid contribution `1 + performance / 100` pearls (performance is contribution points plus
   energy, capped at 100); standing in the game without doing anything pays none. A
   Rewards Guardian pearl roll credits the same balance, and with no points 25 pearls buy one
-  search. The per-game rate is ours; the Wiki's 14-16 pearls belong to the Guardian's loot
-  table.
+  search. Accounts from before the currency change have their inventory and bank pearl items
+  converted into the balance once, on login; the items are removed in the same save. The
+  per-game rate is ours; the Wiki's 14-16 pearls belong to the Guardian's loot table.
 - **Rewards Guardian** (captured):
   - Check: mesbox "You have 3 catalytic energy and 2 elemental energy. You can use them to search
     the rift 2 times. You have searched the rift 4,003 times."
