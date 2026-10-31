@@ -21952,3 +21952,192 @@ test('a quest not started yet opens the overview with its start sentence', () =>
   // A quest's not-started journal line ("I can start this quest by ...") or the start text file gives it.
   assert.deepEqual(withoutOverview, [], 'quests with no start sentence or no cache quest row');
 });
+
+test('In Search of Knowledge feeds Aimeri, fills the tomes and completes through Logosia', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/InSearchOfKnowledge.Quest')(api);
+  const ids = api.core.ItemIdentifiers;
+  const npcs = api.core.NpcIdentifiers;
+  const objects = api.core.ObjectIdentifiers;
+  const attributes = new Map();
+  const items = new Map();
+  const varbits = new Map();
+  const messages = [];
+  const sender = new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+    get: (target, key) => key in target ? target[key] : key === 'getVarbit' ? () => 0 : () => sender,
+  });
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    getItems: () => [...items.entries()].map(([id, amount]) => ({ id, getId: () => id, getAmount: () => amount })),
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount) => {
+      const have = items.get(id) ?? 0;
+      if (have < amount) return false;
+      if (have === amount) items.delete(id);
+      else items.set(id, have - amount);
+      return true;
+    },
+    deleteAtSlot: () => true,
+    getFreeSlots: () => 28,
+    isFull: () => false,
+    forceAdd: (_player, item) => inventory.adds(item.getId(), 1),
+    getSlotForItemId: () => -1,
+    getAddableAmount: (item) => {
+      const id = item.getId();
+      const requested = item.getAmount();
+      const held = items.get(id) ?? 0;
+      if (held > 0) return Math.min(requested, 2147483647 - held);
+      return Math.min(requested, 28 - items.size);
+    },
+    get: () => null,
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => sender,
+    getDialogueManager: () => ({ startDialogues: () => {} }),
+    getSkillManager: () => ({ getExperience: () => 0, addExperience: () => {} }),
+    sendMessage: (message) => messages.push(message),
+    isRegistered: () => false,
+  };
+
+  // Purple sweets are edible, but not the fish/meat/vegetables Aimeri accepts.
+  items.set(ids.PURPLE_SWEETS_2, 5);
+  const sweets = { player, npcId: npcs.BROTHER_AIMERI, itemId: ids.PURPLE_SWEETS_2, slot: -1, handled: false };
+  handlers.itemOnNpc[0](sweets);
+  assert.equal(sweets.handled, true);
+  assert.equal(attributes.get('in-search-of-knowledge:aimeri-fed'), undefined);
+  assert.equal(varbits.get(8393), undefined);
+  assert.equal(items.get(ids.PURPLE_SWEETS_2), 5);
+  items.delete(ids.PURPLE_SWEETS_2);
+
+  for (let fed = 1; fed <= 5; fed++) {
+    items.set(ids.COOKED_MEAT, 1);
+    const event = { player, npcId: npcs.BROTHER_AIMERI, itemId: ids.COOKED_MEAT, slot: -1, handled: false };
+    handlers.itemOnNpc[0](event);
+    assert.equal(event.handled, true);
+    assert.equal(attributes.get('in-search-of-knowledge:aimeri-fed'), fed);
+    assert.equal(varbits.get(8393), fed);
+  }
+
+  handlers.custom.get('npc-dialogue:line')[0]({
+    player, npcId: npcs.BROTHER_AIMERI_2, text: "I'll keep my eyes open.",
+  });
+  assert.equal(attributes.get('quest.in_search_of_knowledge.stage'), 1);
+  assert.equal(varbits.get(8403), 1);
+
+  const shelf = {
+    player, objectId: objects.MUSTY_BOOKSHELF, clickType: 1, option: 'Search',
+    definition: { getName: () => 'Musty bookshelf' }, handled: false,
+  };
+  handlers.objects.at(-1)(shelf);
+  assert.equal(shelf.handled, true);
+  assert.equal(items.get(ids.TOME_OF_THE_SUN), 1);
+  assert.equal(messages.at(-1), 'You find a tome with a symbol of the sun.');
+
+  items.set(ids.TATTERED_SUN_PAGE, 1);
+  const page = {
+    player, usedItemId: ids.TATTERED_SUN_PAGE, usedWithItemId: ids.TOME_OF_THE_SUN, handled: false,
+  };
+  handlers.itemOnItem.at(-1)(page);
+  assert.equal(page.handled, true);
+  assert.equal(attributes.get('in-search-of-knowledge:pages').sun, 1);
+  assert.equal(varbits.get(8399), 1);
+  assert.equal(items.get(ids.TATTERED_SUN_PAGE), undefined);
+
+  attributes.set('in-search-of-knowledge:pages', { sun: 4, moon: 4, temple: 4 });
+  items.set(ids.TOME_OF_THE_SUN, 1);
+  items.set(ids.TOME_OF_THE_MOON, 1);
+  items.set(ids.TOME_OF_THE_TEMPLE, 1);
+  const handIn = { player, npcId: npcs.LOGOSIA, itemId: ids.TOME_OF_THE_SUN, slot: -1, handled: false };
+  handlers.itemOnNpc[1](handIn);
+  assert.equal(handIn.handled, true);
+  assert.equal(attributes.get('quest.in_search_of_knowledge.stage'), 3);
+  assert.equal(items.get(ids.LAMP_OF_KNOWLEDGE), 1);
+  assert.deepEqual(attributes.get('in-search-of-knowledge:tomes-returned'), { sun: 1, moon: 1, temple: 1 });
+
+  attributes.set('in-search-of-knowledge:page-prevention', 1);
+  const drops = { player, drops: [{ itemId: ids.TATTERED_SUN_PAGE }, { itemId: ids.COINS }] };
+  handlers.custom.get('npc-drops:roll')[0](drops);
+  assert.deepEqual(drops.drops.map((drop) => drop.itemId), [ids.COINS]);
+
+  // A full coin stack cannot pay for pages: keep the pages instead of clamping the payout.
+  items.set(ids.COINS, 2147483647);
+  items.set(ids.TATTERED_SUN_PAGE, 1);
+  const capped = { player, npcId: npcs.LOGOSIA, itemId: ids.TATTERED_SUN_PAGE, slot: -1, handled: false };
+  handlers.itemOnNpc[1](capped);
+  assert.equal(capped.handled, true);
+  assert.equal(items.get(ids.TATTERED_SUN_PAGE), 1);
+  assert.equal(items.get(ids.COINS), 2147483647);
+  assert.match(messages.at(-1), /room to carry/);
+
+  // A normal sale pays 1,000 coins per page.
+  items.delete(ids.COINS);
+  items.set(ids.TATTERED_SUN_PAGE, 2);
+  handlers.itemOnNpc[1]({ player, npcId: npcs.LOGOSIA, itemId: ids.TATTERED_SUN_PAGE, slot: -1, handled: false });
+  assert.equal(items.get(ids.TATTERED_SUN_PAGE), undefined);
+  assert.equal(items.get(ids.COINS), 2000);
+
+  let rewardRequest = null;
+  handlers.custom.set('xpreward:open', [(request) => { rewardRequest = request; }]);
+  const rub = { player, itemId: ids.LAMP_OF_KNOWLEDGE, handled: false };
+  handlers.namedItemActions.get('Lamp of knowledge').Rub(rub);
+  assert.equal(rub.handled, true);
+  assert.equal(rewardRequest.minLevel, 40);
+
+  handlers.custom.get('npc-dialogue:action')[0]({ player, npcId: npcs.LOGOSIA, stepId: 'WQyrhA' });
+  assert.equal(attributes.get('in-search-of-knowledge:page-prevention'), 1);
+  assert.equal(varbits.get(10245), 1);
+  handlers.custom.get('npc-dialogue:action')[0]({ player, npcId: npcs.LOGOSIA, stepId: 'XWXpa4' });
+  assert.equal(attributes.get('in-search-of-knowledge:page-prevention'), 0);
+  assert.equal(varbits.get(10245), 0);
+});
+
+test('In Search of Knowledge uses the real inventory for food eligibility and capped coin payouts', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/InSearchOfKnowledge.Quest')(api);
+  const ids = api.core.ItemIdentifiers;
+  const npcs = api.core.NpcIdentifiers;
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { Item } = require('../dist/game/model/Item');
+  const { MAX_STACK_AMOUNT } = require('../dist/game/model/container/StackType');
+  const attributes = new Map();
+  const messages = [];
+  const sender = new Proxy({}, { get: () => () => {} });
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => sender,
+    getDialogueManager: () => ({ startDialogues: () => {} }),
+    sendMessage: (message) => messages.push(message),
+    isRegistered: () => false,
+    isPlayerBot: () => false,
+    getUsername: () => 'ISKRealInventory',
+  };
+  const inventory = new Inventory(player);
+  player.getInventory = () => inventory;
+
+  inventory.setItem(0, new Item(ids.PURPLE_SWEETS_2, 5));
+  const sweets = { player, npcId: npcs.BROTHER_AIMERI, itemId: ids.PURPLE_SWEETS_2, slot: 0, handled: false };
+  handlers.itemOnNpc[0](sweets);
+  assert.equal(inventory.getAmount(ids.PURPLE_SWEETS_2), 5);
+  assert.equal(attributes.get('in-search-of-knowledge:aimeri-fed'), undefined);
+
+  inventory.setItem(0, new Item(ids.COOKED_MEAT, 1));
+  const meat = { player, npcId: npcs.BROTHER_AIMERI, itemId: ids.COOKED_MEAT, slot: 0, handled: false };
+  handlers.itemOnNpc[0](meat);
+  assert.equal(inventory.getAmount(ids.COOKED_MEAT), 0);
+  assert.equal(attributes.get('in-search-of-knowledge:aimeri-fed'), 1);
+
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'in_search_of_knowledge').at(-1);
+  quest.setStage(player, 3);
+  inventory.setItem(0, new Item(ids.COINS, MAX_STACK_AMOUNT));
+  inventory.setItem(1, new Item(ids.TATTERED_SUN_PAGE, 1));
+  const capped = { player, npcId: npcs.LOGOSIA, itemId: ids.TATTERED_SUN_PAGE, slot: 1, handled: false };
+  handlers.itemOnNpc[1](capped);
+  assert.equal(inventory.getAmount(ids.TATTERED_SUN_PAGE), 1);
+  assert.equal(inventory.getAmount(ids.COINS), MAX_STACK_AMOUNT);
+  assert.match(messages.at(-1), /room to carry/);
+});
