@@ -443,6 +443,17 @@
     "native": false
   },
   {
+    "questKey": "bear_your_soul",
+    "sourceKey": "BearYourSoul",
+    "variants": [
+      {
+        "helperVariant": "BEAR_YOUR_SOUL",
+        "helperClass": "com.questhelper.helpers.quests.bearyoursoul.BearYourSoul"
+      }
+    ],
+    "native": false
+  },
+  {
     "questKey": "desert_treasure_i",
     "sourceKey": "DesertTreasureI",
     "variants": [
@@ -911,6 +922,17 @@
       {
         "helperVariant": "HEROES_QUEST",
         "helperClass": "com.questhelper.helpers.quests.heroesquest.HeroesQuest"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "his_faithful_servants",
+    "sourceKey": "HisFaithfulServants",
+    "variants": [
+      {
+        "helperVariant": "HIS_FAITHFUL_SERVANTS",
+        "helperClass": "com.questhelper.helpers.miniquests.hisfaithfulservants.HisFaithfulServants"
       }
     ],
     "native": false
