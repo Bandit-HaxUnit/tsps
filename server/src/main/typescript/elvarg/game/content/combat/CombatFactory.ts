@@ -135,6 +135,13 @@ export class CombatFactory {
                 player.getCombat().setRangedWeapon(resolvedWeapon);
             }
 
+            // An activated special owns this swing even while a spell is autocast:
+            // OSRS lets the staff's special (Immolate/Invocate) override autocast.
+            const special = getPlayerCombatSpecial(player);
+            if (player.isSpecialActivated() && special != null) {
+                return special.getCombatMethod();
+            }
+
             if (
                 player.getCombat().getCastSpell() != null ||
                 (player.getCombat().getAutocastSpell() != null && player.getEquipment().hasStaffEquipped())
@@ -147,11 +154,6 @@ export class CombatFactory {
                 if (resolved) {
                     return resolved;
                 }
-            }
-
-            const special = getPlayerCombatSpecial(player);
-            if (player.isSpecialActivated() && special != null) {
-                return special.getCombatMethod();
             }
 
             if (player.getCombat().getRangedWeapon() != null) {
