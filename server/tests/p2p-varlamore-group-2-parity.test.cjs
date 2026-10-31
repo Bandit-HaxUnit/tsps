@@ -1242,3 +1242,72 @@ test('Primio opens the canonical first-trip menu and flies both ways only after 
   assert.equal(p.varbits.get(9652), 4, 'later Fortis trips keep the completed first-trip state');
   assert.equal(starts.length, 3, 'repeat flights do not replay the initial menu or arrival dialogue');
 });
+
+// ---------------------------------------------------------------------------
+// Children of the Sun - live scene spawns (RSProx 1637)
+// ---------------------------------------------------------------------------
+function childrenOfTheSun() {
+  const h = harness('ChildrenOfTheSun'), p = player();
+  return { h, p };
+}
+
+test('COTS delegation walks into the square and stops in the captured formation', () => {
+  const { h, p } = childrenOfTheSun();
+  h.quest.setStage(p, 2);
+  const before = h.npcs.length;
+  h.action(p, N.ALINA_2, 'wltzqo');
+  const spawned = h.npcs.slice(before);
+  assert.equal(spawned.length, 10, 'the delegation is ten NPCs, not just a camera move');
+  const byId = new Map(spawned.map(npc => [npc.getId(), npc]));
+  const stops = [
+    [N.PRINCE_ITZLA_ARKAN_2, 3219, 3430],
+    [N.SERVIUS_TEOKAN_OF_RALOS, 3219, 3429],
+    [N.FURIA_TULLUS, 3220, 3430],
+    [N.ENNIUS_TULLUS, 3220, 3429],
+    [N.KNIGHT_OF_VARLAMORE_3, 3219, 3431],
+    [N.KNIGHT_OF_VARLAMORE_4, 3219, 3428],
+    [N.KNIGHT_OF_VARLAMORE_5, 3220, 3431],
+    [N.KNIGHT_OF_VARLAMORE_6, 3220, 3428],
+    [N.KNIGHT_OF_VARLAMORE_7, 3221, 3430],
+    [N.KNIGHT_OF_VARLAMORE_8, 3221, 3429],
+  ];
+  for (const [id, x, y] of stops) {
+    const npc = byId.get(id);
+    assert.ok(npc, `delegation member ${id} spawned`);
+    assert.deepEqual([npc.getLocation().getX(), npc.getLocation().getY()], [x, y], `delegation ${id} stop`);
+  }
+});
+
+test('COTS guards use the captured posts, facings and wander paths', () => {
+  const { h, p } = childrenOfTheSun();
+  h.quest.setStage(p, 10);
+  p.moveTo(new core.Location(3211, 3437, 0));
+  h.line(p, N.SERGEANT_TOBYN, 'Right, we can work with that. Now get to it.');
+  const guards = h.npcs.filter(npc => [N.GUARD_187, N.GUARD_190, N.GUARD_193, N.GUARD_196,
+    N.GUARD_199, N.GUARD_202, N.GUARD_205, N.GUARD_208, N.GUARD_211, N.GUARD_214].includes(npc.getId()));
+  assert.equal(guards.length, 10);
+  const posts = new Map(guards.map(npc => [npc.getId(), npc]));
+  const leaning = posts.get(N.GUARD_196); // 12677, the guard on Lowe's north wall
+  assert.deepEqual([leaning.getLocation().getX(), leaning.getLocation().getY()], [3237, 3427]);
+  assert.equal(leaning.face, 6, 'leaning guard faces south, away from the wall');
+  assert.equal(leaning.wanderRadius, 0, 'the leaning guard stays put');
+  const patrol = posts.get(N.GUARD_199);
+  assert.ok(patrol.wanderRadius >= 3, 'real guards have a path to walk');
+  assert.equal(posts.get(N.GUARD_187).face, 4, 'bandit outside the tent faces east');
+  assert.equal(posts.get(N.GUARD_190).face, 7, 'bandit by the news stand faces south-east');
+});
+
+test('COTS door scene spawns the waiting bandits inside the house', () => {
+  const { h, p } = childrenOfTheSun();
+  h.quest.setStage(p, 8);
+  const before = h.npcs.length;
+  const event = { player: p, objectId: core.ObjectIdentifiers.DOOR_695, location: { x: 3259, y: 3400 }, handled: false };
+  h.emit('door:toggle', event);
+  assert.equal(event.handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3263, 3401]);
+  const spawned = h.npcs.slice(before);
+  assert.equal(spawned.length, 5, 'bag guard and four bandits appear for the eavesdrop');
+  assert.deepEqual(spawned.map(npc => npc.getId()).sort(), [N.GUARD_186, N.BANDIT_16, N.BANDIT_17, N.BANDIT_18, N.BANDIT_19].sort());
+  assert.deepEqual(spawned.map(npc => [npc.getLocation().getX(), npc.getLocation().getY()]).sort(),
+    [[3265, 3403], [3266, 3401], [3266, 3405], [3268, 3402], [3268, 3404]].sort());
+});
