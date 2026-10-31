@@ -524,6 +524,36 @@ test('a volume slider released sets the stored volume from its trigger argument'
   assert.equal(applied.length, 0);
 });
 
+test('the mute buttons save the volume and restore it, as live does', () => {
+  const { buttons } = registered();
+  const audio = { 168: 8, 169: 65, 872: 100, 3796: 100, 3109: 0, 3797: 0 };
+  const sent = [];
+  const player = {
+    getAudioSettings: () => audio,
+    setAudioSetting: (varp, value) => { audio[varp] = value; return true; },
+    applyAudioSettingFromClient: (varp, value) => { audio[varp] = value; return true; },
+    getPacketSender: () => ({ sendConfig: (varp, value) => sent.push([varp, value]) }),
+  };
+  const click = (component) => {
+    const buttonId = (116 << 16) | component;
+    assert.equal(buttons.get(buttonId)({ player, buttonId }), true, `mute ${component}`);
+  };
+  // A live capture: music at 8, then its mute (116:110): 3109 = 8, then 168 = 0.
+  click(110);
+  assert.deepEqual(sent.splice(0), [[3109, 8], [168, 0]]);
+  // Sound effects keep their own bits (8-14) of 3109, beside music's saved level.
+  click(124);
+  assert.deepEqual(sent.splice(0), [[3109, 8 | (65 << 8)], [169, 0]]);
+  // Unmuting puts the saved level back.
+  click(110);
+  assert.deepEqual(sent.splice(0), [[168, 8]]);
+  click(124);
+  assert.deepEqual(sent.splice(0), [[169, 65]]);
+  // Master saves into 3797.
+  click(96);
+  assert.deepEqual(sent.splice(0), [[3797, 100], [3796, 0]]);
+});
+
 test('the volume sliders get the transmit-trigger event at login, so the client sends their triggers', async () => {
   const { logins } = registered();
   const flags = [];

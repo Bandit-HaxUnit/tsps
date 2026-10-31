@@ -60,6 +60,17 @@ const VOLUME_SLIDER_VARPS = new Map([
   [(116 << 16) | 137, 872], // area sounds
 ]);
 
+// The mute button beside each slider. Live toggles it on the server (RSProx captures): muting
+// saves the level in a varbit of options_save_sounds (3109) or, for master, options_save_sounds2
+// (3797) and sets the volume to 0; unmuting puts the saved level back.
+const VOLUME_MUTE_BUTTONS = new Map([
+  [(116 << 16) | 96, { volumeVarp: 3796, savedVarp: 3797, shift: 0, bits: 8 }], // master
+  [(116 << 16) | 110, { volumeVarp: 168, savedVarp: 3109, shift: 0, bits: 8 }], // music
+  [(116 << 16) | 124, { volumeVarp: 169, savedVarp: 3109, shift: 8, bits: 7 }], // sound effects
+  [(116 << 16) | 138, { volumeVarp: 872, savedVarp: 3109, shift: 15, bits: 7 }], // area sounds
+]);
+const UNMUTED_DEFAULT_VOLUME = 100;
+
 // Settings > Display: "Game client layout" dropdown. The row label is built by
 // cache script 7992 from entry enum 3509 and its option rows are dynamic
 // children of 116:40, so clicks only reach us when that range has op1 flags
@@ -601,6 +612,24 @@ function releaseVolumeSlider({ player, buttonId, argsData, scriptTrigger }) {
   return true;
 }
 
+function toggleMute({ player, buttonId }) {
+  const mute = VOLUME_MUTE_BUTTONS.get(buttonId);
+  const settings = player.getAudioSettings?.();
+  if (!mute || !settings) return false;
+  const mask = ((1 << mute.bits) - 1) << mute.shift;
+  const packed = settings[mute.savedVarp] ?? 0;
+  const volume = settings[mute.volumeVarp] ?? 0;
+  if (volume > 0) {
+    player.setAudioSetting(mute.savedVarp, (packed & ~mask) | (volume << mute.shift));
+    player.getPacketSender().sendConfig(mute.savedVarp, player.getAudioSettings()[mute.savedVarp]);
+    player.applyAudioSettingFromClient(mute.volumeVarp, 0);
+  } else {
+    player.applyAudioSettingFromClient(mute.volumeVarp, ((packed & mask) >>> mute.shift) || UNMUTED_DEFAULT_VOLUME);
+  }
+  player.getPacketSender().sendConfig(mute.volumeVarp, player.getAudioSettings()[mute.volumeVarp]);
+  return true;
+}
+
 function xpDropsSetupVarps() {
   return new Set([...XPDROPS_SETUP_DROPDOWNS.values()].map((varbit) => CacheDefinitions.getVarbit(varbit).baseVar));
 }
@@ -686,6 +715,7 @@ module.exports = {
     api.onCustomEvent("player:varp-transmit", transmitXpDropsSetup);
     api.onInterfaceActionButton([...XPDROPS_SETUP_DROPDOWNS.keys()], chooseXpDropsSetupRow);
     api.onInterfaceActionButton([...VOLUME_SLIDER_VARPS.keys()], releaseVolumeSlider);
+    api.onInterfaceActionButton([...VOLUME_MUTE_BUTTONS.keys()], toggleMute);
     api.onPlayerLogin(enableVolumeSlidersLater);
     api.onInterfaceActionButton(WELCOME_PLAY_BUTTON, enableVolumeSlidersLater);
     api.onCustomEvent("gameframe:tab-mounted", enableVolumeSlidersOnTab);
