@@ -21,6 +21,7 @@ import { Misc } from "../../util/Misc";
 import {
   encodeBankSnapshot,
   encodeChatMessage,
+  type ChatStyle,
   encodeCollectionLogSnapshot,
   encodeContentData,
   encodeDestination,
@@ -67,6 +68,7 @@ import {
   encodeWidgetOpen,
   encodeWidgetOpenSub,
   encodeWidgetRunScript,
+  NATIVE_CLIENT_ATTRIBUTE,
   encodeWidgetSetAnimation,
   encodeWidgetSetFlags,
   encodeWidgetSetFlagsRange,
@@ -162,6 +164,9 @@ export interface SubInterfaceMount {
   readonly groupId: number;
   readonly type: number;
 }
+
+/** OSRS's worn-equipment inventory. */
+const WORN_INVENTORY_ID = 94;
 
 export class PacketSender {
   private groundItemSerial = 0;
@@ -714,9 +719,9 @@ export class PacketSender {
   }
 
   /** `chatType` overrides the public type 2: ChatType.AUTOTYPER / MODAUTOTYPER for autochat. */
-  sendPublicChat(message: string, from: string, playerId: number, chatType?: number): this {
+  sendPublicChat(message: string, from: string, playerId: number, chatType?: number, style?: ChatStyle): this {
     this.player.getSession().sendClientPacket(
-      encodeChatMessage("public", message, from, "", playerId, chatType)
+      encodeChatMessage("public", message, from, "", playerId, chatType, style)
     );
     return this;
   }
@@ -923,6 +928,18 @@ export class PacketSender {
     }
     if (container?.constructor?.name === "Equipment") {
       this.player.getUpdateFlag().flag(Flag.APPEARANCE);
+      // The browser builds worn equipment from the appearance block; the official client needs
+      // the inventory (94) itself, with quantities (darts, knives), which appearance can't carry.
+      if (this.player.getAttribute(NATIVE_CLIENT_ATTRIBUTE) === true) {
+        const slots = Array.from({ length: capacity }, (_, slot) => ({
+          slot,
+          itemId: items?.[slot]?.getId?.() ?? -1,
+          quantity: items?.[slot]?.getAmount?.() ?? 0,
+        })).filter((slot) => slot.itemId >= 0);
+        this.player.getSession().sendClientPacket(
+          encodeWidgetRunScript(-1, [], undefined, undefined, { [WORN_INVENTORY_ID]: { capacity, slots } })
+        );
+      }
       return this;
     }
     return this;

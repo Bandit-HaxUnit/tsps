@@ -12,6 +12,8 @@
     "server": "yarn --cwd server dev",
     "client": "yarn --cwd client start",
     "bridge": "node scripts/run-with-env.mjs - scripts/quest-helper-bridge.mjs",
+    "gateway": "gateway/gradlew -p gateway run --console=plain",
+    "gateway:test": "gateway/gradlew -p gateway test --console=plain",
     "docs:quests": "node scripts/quest-docs.mjs"
   },
   "devDependencies": {

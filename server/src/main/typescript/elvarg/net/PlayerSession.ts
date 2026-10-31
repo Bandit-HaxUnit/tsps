@@ -404,6 +404,7 @@ export class PlayerSession {
           modelCustomisation: npc.getModelCustomisationForUpdate?.() ?? undefined,
           baseAnimations: npc.getBaseAnimationsForUpdate?.() ?? undefined,
           transparency: npc.getTransparency?.() ?? undefined,
+          tint: npc.getTint?.() ?? undefined,
         };
       })
     );
