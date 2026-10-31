@@ -328,6 +328,8 @@ Ignisia (7374, in the camp) has an Exchange option. It trades spare Wintertodt u
 3. "What would you like to trade [your Pyromancer pieces] for?" with "Extra Crate." / "Burnt Pages.".
 4. One title confirmation per item type held: "Trade in 2x Warm gloves for supply crates?" or "Trade in 1x Pyromancer garb for 50x burnt pages?".
 
+Confirmations are rechecked when accepted: equipping, banking or dropping the item while the confirmation is open cancels that payout, and a whole outfit is rechecked before any piece is removed.
+
 A charged tome of fire is refused: "I think you may want to remove the pages before handing that over to me." Empty it first.
 
 ## Not captured yet

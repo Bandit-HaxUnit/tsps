@@ -105,12 +105,16 @@ function giveCrates(player, count, rolls) {
 }
 
 function trade(player, mode, group, count) {
+  // The confirmation can stay open while the player equips, banks or drops the item.
+  // Recheck every part of the offer (the whole outfit included) before taking or paying.
+  if (!Number.isInteger(count) || count <= 0 || countOf(player, group) < count) return false;
   take(player, group, count);
   if (mode === "crate") giveCrates(player, count, group.rolls);
   else {
     player.getInventory().adds(ids().BURNT_PAGE, count * group.pages);
     player.getInventory().refreshItems();
   }
+  return true;
 }
 
 function removal(player) {

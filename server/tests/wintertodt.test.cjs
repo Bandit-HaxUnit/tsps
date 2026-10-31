@@ -829,3 +829,53 @@ test('extra crate rolls never give a unique other than the dragon axe, nor pages
     if (reward) assert.ok(!forbidden.has(reward.id), `${reward.id} is not an extra-crate unique`);
   }
 });
+
+test('accepting a confirmation after equipping the item pays nothing', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { EquipPacketListener } = require('../dist/net/packet/impl/EquipPacketListener');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { OptionDialogue } = require('../dist/game/model/dialogues/entries/impl/OptionDialogue');
+
+  const player = new Player(null);
+  player.setUsername('Stale');
+  player.getSession = () => ({ sendClientPacket() {}, write() {} });
+  player.getFrameUpdater = () => ({
+    clearGroup() {}, shouldUpdate() { return true; }, interfaceTextMap: new Map(),
+  });
+  player.getInventory().adds(I.PYROMANCER_HOOD, 1);
+
+  Ignisia.exchange({ player });
+  const manager = player.getDialogueManager();
+  assert.equal(manager.handleResume((231 << 16) | 5, 1), true, 'continue the NPC line');
+  assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID, 1), true, 'Yes, I do.');
+  const menu = manager.getCurrent();
+  assert.equal(menu.getTitle(), 'What would you like to trade your Pyromancer pieces for?');
+  assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID, 2), true, 'Burnt Pages.');
+
+  const confirm = manager.getCurrent();
+  assert.equal(confirm.getTitle(), 'Trade in 1x Pyromancer hood for 50x burnt pages?');
+  const slot = player.getInventory().getItems().findIndex((item) => item.getId() === I.PYROMANCER_HOOD);
+  EquipPacketListener.equip(player, I.PYROMANCER_HOOD, slot, Inventory.INTERFACE_ID);
+  assert.equal(player.getEquipment().getAmount(I.PYROMANCER_HOOD), 1, 'the hood is worn');
+  assert.ok(manager.isActive(), 'native equipping leaves the chatbox confirmation open');
+
+  assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID, 1), true, 'Yes.');
+  assert.equal(player.getInventory().getAmount(I.BURNT_PAGE), 0, 'the stale offer pays nothing');
+  assert.equal(player.getInventory().getAmount(I.PYROMANCER_HOOD), 0);
+  assert.equal(player.getEquipment().getAmount(I.PYROMANCER_HOOD), 1);
+
+  assert.equal(Ignisia.trade(player, 'crate', Ignisia.PIECES[0], 1), false, 'the crate path rechecks too');
+  assert.equal(player.getInventory().getAmount(I.EXTRA_SUPPLY_CRATE), 0);
+});
+
+test('a stale outfit offer leaves every piece in place', () => {
+  const player = fakePlayer('StaleOutfit');
+  for (const id of [I.PYROMANCER_HOOD, I.PYROMANCER_GARB, I.PYROMANCER_ROBE, I.PYROMANCER_BOOTS]) {
+    player.inventory.adds(id);
+  }
+  player.inventory.delete(I.PYROMANCER_GARB, 1);
+  assert.equal(Ignisia.trade(player, 'pages', Ignisia.OUTFIT, 1), false);
+  assert.equal(player.inventory.getAmount(I.BURNT_PAGE), 0);
+  assert.equal(player.inventory.getAmount(I.PYROMANCER_HOOD), 1, 'nothing was removed');
+  assert.equal(player.inventory.getAmount(I.PYROMANCER_ROBE), 1);
+});
