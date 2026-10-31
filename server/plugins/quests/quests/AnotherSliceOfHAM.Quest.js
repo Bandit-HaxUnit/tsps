@@ -402,12 +402,14 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
     return weapon?.getId?.() === ANCIENT_MACE_ITEM_ID;
   }
 
-  /** Favour of the War God: the ancient mace must be wielded and its special armed. */
-  function isAncientMaceSpecial(player) {
-    if (typeof player.isSpecialActivated !== "function" || player.isSpecialActivated() !== true) return false;
-    if (!equippedAncientMace(player)) return false;
-    const special = player.getCombatSpecial?.();
-    return special === null || special === undefined || special.getId?.() === ANCIENT_MACE_SPECIAL_ID;
+  /** Favour of the War God: the ancient mace must have launched its special at Sigmund. */
+  function isAncientMaceSpecial(hit) {
+    const method = hit?.getCombatMethod?.();
+    const maceMethod = api.core.CombatSpecial?.getById?.(ANCIENT_MACE_SPECIAL_ID)?.getCombatMethod?.() ?? null;
+    // The armed flag clears as soon as the swing has queued its hit (Combat.executeAttack);
+    // the launched special is what the hit retains, so it identifies the mace's special.
+    if (!method || !maceMethod) return false;
+    return method === maceMethod;
   }
 
   function specialUsed(player) {
@@ -1242,7 +1244,7 @@ module.exports = function registerAnotherSliceOfHAMQuest(api) {
       return;
     }
     if (specialUsed(player)) return;
-    if (!isAncientMaceSpecial(player)) {
+    if (!isAncientMaceSpecial(hit)) {
       zeroHit(hit);
       if (!prayerBlockedNotified.has(player)) {
         prayerBlockedNotified.add(player);

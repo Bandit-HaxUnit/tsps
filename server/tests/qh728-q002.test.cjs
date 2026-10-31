@@ -12,7 +12,16 @@ require('node:test').before(async () => {
     require('node:path').resolve(__dirname, '..'));
 });
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const { CombatSpecial } = require('../dist/game/content/combat/CombatSpecial');
 const runtime = require('../plugins/quests/QuestRuntime');
+
+// The quest identifies the ancient mace special from the hit's retained combat method, so the
+// registry must hold the real special exactly as the combat plugin registers it.
+require('../plugins/combat/specials/AncientMace.SpecialAttack')({
+  core: PluginManager.getCoreApi(),
+  registerCombatSpecial: (definition) => CombatSpecial.register(definition),
+  onCombatHitRoll: () => {},
+});
 
 const transcripts = [];
 runtime.startTranscript = (api, player, npcId, page, variant, select) => {
@@ -260,6 +269,13 @@ function setup(options = {}) {
         getAttacker: () => player,
         getCombatType: () => options.combatType ?? core.CombatType.MELEE,
         isAccurate: () => options.accurate !== false,
+        // The launched special's combat method; the armed flag clears as soon as the swing
+        // queues the hit, so an armed-but-cleared launch still carries it here.
+        getCombatMethod: () => options.combatMethod ?? (
+          specialActive && weapon?.getId?.() === I.ANCIENT_MACE
+            ? CombatSpecial.getForWeaponId(I.ANCIENT_MACE)?.getCombatMethod?.() ?? null
+            : null
+        ),
         getTotalDamage: () => damage,
         setTotalDamage(value) { damage = value; },
       };
@@ -753,6 +769,37 @@ test('Another Slice of H.A.M.: objectives stay ordered and the mace special gate
   h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'VcaIcO' });
   h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
   assert.equal(h.quest.getStage(h.player), 10, 'the train opening is required before completion');
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: '09Lek1' });
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 11);
+  assert.equal(h.quest.isComplete(h.player), true);
+});
+
+test('Another Slice of H.A.M.: the queued ancient mace special lands after the armed flag clears', () => {
+  const h = setup();
+  h.quest.setStage(h.player, 10);
+  h.attrs.set('quest.another_slice_of_ham.train-agreement', true);
+  h.attrs.set('quest.another_slice_of_ham.sigmund-exposed', true);
+  h.attrs.delete('quest.another_slice_of_ham.mace-special-used');
+  h.setWeapon(h.I.ANCIENT_MACE);
+  h.setSpecial(true);
+
+  // Combat.executeAttack clears the armed flag as soon as it has queued the special's hit;
+  // the impact runs the hit queue with that flag already cleared, so the delivered hit is the
+  // launched special even though the player no longer reads as armed.
+  const launchedMethod = CombatSpecial.getForWeaponId(h.I.ANCIENT_MACE)?.getCombatMethod?.() ?? null;
+  assert.ok(launchedMethod, 'the ancient mace special is registered');
+  h.setSpecial(false);
+  assert.equal(h.hitSigmund({ combatMethod: launchedMethod }), 10,
+    'the queued ancient mace special is not rejected once the armed flag cleared');
+  assert.equal(h.attrs.get('quest.another_slice_of_ham.mace-special-used'), true,
+    'the landed ancient mace special marks the showdown objective used');
+
+  for (const fn of h.hooks.npcDeath) fn({ killer: h.player, npcId: h.N.SIGMUND_8, npc: { getId: () => h.N.SIGMUND_8 } });
+  assert.equal(h.lastVariant(), 'defeating-sigmund');
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
+  assert.equal(h.quest.getStage(h.player), 10);
+  h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'VcaIcO' });
   h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: '09Lek1' });
   h.emit('npc-dialogue:action', { npcId: h.N.SIGMUND_8, stepId: 'jiiizC' });
   assert.equal(h.quest.getStage(h.player), 11);
