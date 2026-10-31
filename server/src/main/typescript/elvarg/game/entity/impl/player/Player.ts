@@ -271,6 +271,8 @@ export class Player extends Mobile {
             if (PluginManager.emitPlayerBeforeDeath(beforeDeath)) {
                 return;
             }
+            // A respawn is the same Player object; drop rolls cached against the state it died in.
+            CombatFactory.clearHitRollCache(this);
             TaskManager.submit(new PlayerDeathTask(this, beforeDeath.announce !== false));
             this.isDying = true;
         }
