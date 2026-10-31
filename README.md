@@ -24,21 +24,19 @@ If setup is interrupted, run `npm run setup` again.
 
 Running several branches at once, one worktree each on its own ports: see [docs/worktrees.md](docs/worktrees.md).
 
-### Optional: the in-game Quest Helper
+### Optional: Java sidecars
 
-The client's Quest Helper panel is driven by the upstream
-[Quest Helper](https://github.com/Zoinkwiz/quest-helper) Java code, compiled by
-[`tools/quest-helper-bridge`](tools/quest-helper-bridge/README.md) and run locally. It needs
-**Java 21** and a one-time build: follow that README to clone the pinned source and run
-`./gradlew test installDist`. Then, in a second terminal, with `QUEST_HELPER_TOKEN` set to any
-24+ characters in `.env`:
+Two optional local services are Java; neither is needed to run the server.
 
-```bash
-yarn bridge
-```
+| Command | What it enables | Setup |
+| --- | --- | --- |
+| `yarn bridge` | the in-game Quest Helper panel, from the upstream Java helper | **Java 21**, then the one-time build in [`tools/quest-helper-bridge`](tools/quest-helper-bridge/README.md) |
+| `yarn gateway` | the official OSRS client through RSProx, playing on this server | [`gateway/README.md`](gateway/README.md) |
 
-Without it the panel reports that the engine has not been started. Tutorial Island and Recipe for
-Disaster still work, because the server answers those itself.
+The bridge also needs `QUEST_HELPER_TOKEN` (any 24+ characters) in `.env`; without it the panel
+reports that the engine has not been started, while Tutorial Island and Recipe for Disaster still
+work because the server answers those itself. A separate single-client RuneLite 1.13.3 demo lives
+in [`tools/runelite-gateway`](tools/runelite-gateway/README.md).
 
 ## Publish your world
 
