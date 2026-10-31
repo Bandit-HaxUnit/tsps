@@ -350,6 +350,36 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
       .map((step) => (Array.isArray(step?.steps) ? { ...step, steps: stripHandInJumps(step.steps) } : step));
   }
 
+  /** Only the reward condition's body: the resume path after all three tomes are handed in. */
+  function selectRewardSteps(steps) {
+    const reward = (steps ?? []).find((step) =>
+      step?.type === "condition" && step.id === HANDIN_CONDITION_ALL);
+    return reward?.steps ?? [];
+  }
+
+  function resumeReward(player, npc) {
+    pendingHandIn.set(player, { usedTome: null, singleOther: null, multiOthers: null });
+    const played = startTranscript(api, player, LOGOSIA, LOGOSIA_PAGE,
+      "using-a-forthos-tome-on-logosia", selectRewardSteps, npc);
+    if (!played) {
+      pendingHandIn.delete(player);
+      player.sendMessage("Logosia is not ready to reward you.");
+    }
+  }
+
+  /**
+   * With all three tomes handed in but the lamp not yet claimed, Talk-to must resume the
+   * reward. Without this, interrupting the hand-in at "Your contributions..." strands the
+   * player: the shelves refuse the returned tomes and the ordinary Talk-to is the library menu.
+   */
+  function handleLogosiaTalk(event) {
+    const { player } = event;
+    if (!player || quest.isComplete(player)) return false;
+    if (returnedCount(player) < TOMES.length) return false;
+    resumeReward(player, event.npc ?? event.target ?? null);
+    return true;
+  }
+
   function handleLine(event) {
     if (isAimeri(event.npcId)) {
       if (event.text !== "I'll keep my eyes open.") return;
@@ -371,6 +401,20 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
     if (event.npcId !== LOGOSIA || !event.player) return;
     const { player, stepId } = event;
     const pending = pendingHandIn.get(player);
+
+    // The lamp can be reached from a fresh resume (no pending tome) as well as from the
+    // uninterrupted hand-in, so claim it before the pending-box checks.
+    if (stepId === HANDIN_MESSAGE_LAMP) {
+      if (returnedCount(player) >= TOMES.length && !quest.isComplete(player)) {
+        if (quest.getStage(player) < STAGE_HANDED_IN) quest.setStage(player, STAGE_HANDED_IN);
+        // Live has no completion jingle or scroll for this miniquest.
+        quest.complete(player, { scroll: false });
+      }
+      event.box = { items: [LAMP_OF_KNOWLEDGE] };
+      event.handled = true;
+      pendingHandIn.delete(player);
+      return;
+    }
 
     if (pending) {
       if (stepId === HANDIN_MESSAGE_SHOW) {
@@ -394,17 +438,6 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
           event.box = { items: [others[0].tome, others[1].tome] };
           event.handled = true;
         }
-        return;
-      }
-      if (stepId === HANDIN_MESSAGE_LAMP) {
-        if (returnedCount(player) >= TOMES.length && !quest.isComplete(player)) {
-          if (quest.getStage(player) < STAGE_HANDED_IN) quest.setStage(player, STAGE_HANDED_IN);
-          // Live has no completion jingle or scroll for this miniquest.
-          quest.complete(player, { scroll: false });
-        }
-        event.box = { items: [LAMP_OF_KNOWLEDGE] };
-        event.handled = true;
-        pendingHandIn.delete(player);
         return;
       }
     }
@@ -758,6 +791,7 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction("Logosia", { "Talk-to": handleLogosiaTalk });
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-drops:roll", filterPageDrops);

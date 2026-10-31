@@ -22219,3 +22219,56 @@ test('In Search of Knowledge uses the real inventory for food eligibility and ca
   assert.equal(inventory.getAmount(ids.COINS), MAX_STACK_AMOUNT);
   assert.match(messages.at(-1), /room to carry/);
 });
+
+test('In Search of Knowledge resumes the reward after the final tome is handed in', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/InSearchOfKnowledge.Quest')(api);
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const ids = api.core.ItemIdentifiers;
+  const npcs = api.core.NpcIdentifiers;
+  const attributes = new Map();
+  const items = new Map();
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    getItems: () => [...items.entries()].map(([id, amount]) => ({ id, getId: () => id, getAmount: () => amount })),
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: () => false,
+    getFreeSlots: () => 28,
+    isFull: () => false,
+    forceAdd: (_player, item) => inventory.adds(item.getId(), 1),
+  };
+  const sender = new Proxy({ getVarbit: () => 0, getVarp: () => 0 }, {
+    get: (target, key) => key in target ? target[key] : () => sender,
+  });
+  let manager;
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => sender,
+    getDialogueManager: () => manager,
+    getUsername: () => 'ISKResume',
+    isPlayerBot: () => false,
+    sendMessage: () => {},
+    isRegistered: () => false,
+  };
+  manager = new DialogueManager(player);
+  attributes.set('quest.in_search_of_knowledge.stage', 2);
+  attributes.set('in-search-of-knowledge:tomes-returned', { sun: 1, moon: 1, temple: 1 });
+
+  const talk = handlers.npcInteractions.get('Logosia')['Talk-to'];
+  assert.equal(talk({ player, npc: null, npcId: npcs.LOGOSIA, definition: { getName: () => 'Logosia' } }), true);
+  const lines = [];
+  for (let i = 0; i < 30 && manager.getCurrent(); i++) {
+    const current = manager.getCurrent();
+    if (typeof current.getText === 'function') lines.push(current.getText());
+    manager.advance();
+  }
+  assert.ok(lines.some((line) => /^Your contributions to the library/.test(line)));
+  assert.ok(lines.includes('You receive an experience lamp as a reward.'));
+  assert.ok(lines.some((line) => line.startsWith('If you find any spare pages')));
+  assert.ok(lines.includes("I'll keep an eye out."));
+  assert.ok(lines.includes('Enough talk now, Shhhh!'));
+  assert.equal(attributes.get('quest.in_search_of_knowledge.stage'), 3);
+  assert.equal(items.get(ids.LAMP_OF_KNOWLEDGE), 1);
+});
