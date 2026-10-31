@@ -14897,6 +14897,7 @@ function lunarPlayer(api, { stage = 0, items = {}, attributes = {}, spellbook = 
   attrs.set('quest.lunar_diplomacy.stage', stage);
   const equipment = new Map();
   const messages = [];
+  const moves = [];
   if (spellbook) equipment.set('spellbook', spellbook);
   const player = {
     getAttribute: (key) => attrs.get(key),
@@ -14917,14 +14918,14 @@ function lunarPlayer(api, { stage = 0, items = {}, attributes = {}, spellbook = 
     getPacketSender: () => noopPacketSender,
     sendMessage: (message) => messages.push(message),
     getLocation: () => new api.core.Location(2150, 3868, 0),
-    moveTo: () => {},
+    moveTo: (tile) => moves.push(tile),
     getSpellbook: () => spellbook,
     setSpellbook: (book) => { spellbook = book; },
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
     performAnimation: () => {},
     isPlayerBot: () => false,
   };
-  return { player, inventory, attrs, equipment, messages, get spellbook() { return spellbook; } };
+  return { player, inventory, attrs, equipment, messages, moves, get spellbook() { return spellbook; } };
 }
 
 function loadLunarPlugin(api) {
@@ -15133,6 +15134,127 @@ test('Lunar sailing needs the Seal of Passage and the right stage', () => {
   action({ player: wrongBrundt.player, npcId: brundt, stepId: 'jJ33Bh' });
   assert.equal(wrongBrundt.attrs.get(stageKey), 0, 'Brundt cannot grant a seal out of order');
   assert.equal(wrongBrundt.inventory.get(seal) ?? 0, 0);
+});
+
+test('Birds-Eye Jack advances stage 40 to 45 so Bentley can blame the navigator', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const variant = handlers.variant.at(-1);
+  const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
+  const playerFixture = lunarPlayer(api, { stage: 40 });
+  const selected = variant({
+    player: playerFixture.player,
+    npcId: api.core.NpcIdentifiers.BIRDS_EYE_JACK_2,
+    pages: [{ page: 'Lunar Diplomacy' }],
+  });
+  assert.equal(
+    selected,
+    'pirates-cove-talking-to-birds-eye-jack-at-the-captain-s-suggestion',
+    'the real Jack variant is selected after the circular voyage'
+  );
+  assert.equal(playerFixture.attrs.get('quest.lunar_diplomacy.stage'), 45);
+
+  choice({
+    player: playerFixture.player,
+    npcId: api.core.NpcIdentifiers.CAPTAIN_BENTLEY,
+    option: "Perhaps it's the Navigator's fault?",
+  });
+  assert.equal(
+    playerFixture.attrs.get('quest.lunar_diplomacy.stage'),
+    50,
+    'Bentley accepts the navigator accusation at stage 45'
+  );
+});
+
+test('Captain Bentley returns to Lunar Isle at stages 125 and 190', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  const seal = api.core.ItemIdentifiers.SEAL_OF_PASSAGE;
+  const npc = { getLocation: () => ({ x: 2222, y: 3796, z: 2 }) };
+  for (const stage of [125, 190]) {
+    const fixture = lunarPlayer(api, { stage, items: { [seal]: 1 } });
+    action({
+      player: fixture.player,
+      npc,
+      npcId: api.core.NpcIdentifiers.CAPTAIN_BENTLEY,
+      stepId: 'szE3tO',
+    });
+    assert.ok(fixture.moves.length > 0, `stage ${stage} gets a return ferry`);
+    assert.deepEqual(
+      [fixture.moves.at(-1).getX(), fixture.moves.at(-1).getY(), fixture.moves.at(-1).getZ()],
+      [2118, 3894, 0],
+      `stage ${stage} lands at the Lunar Isle docks`
+    );
+  }
+});
+
+test('relogging during the final fight restores the owned Me actor', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.getWorld = () => ({ getNpcs: () => [] });
+  api.spawnNpc = (spec) => {
+    const npc = { ...spec, getOwner: () => spec.owner, getId: () => spec.id };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = () => {};
+  loadLunarPlugin(api);
+  const login = handlers.playerLogin.at(-1);
+  const fixture = lunarPlayer(api, {
+    stage: 165,
+    attributes: {
+      'quest.lunar_diplomacy.challenges': {
+        tree: { done: true, reported: true },
+        race: { done: true, reported: true },
+        number: { done: true, reported: true },
+        emote: { done: true, reported: true },
+        dice: { done: true, reported: true },
+        memory: { done: true, reported: true },
+      },
+    },
+  });
+  fixture.player.getLocation = () => new api.core.Location(1761, 5090, 2);
+  login({ player: fixture.player });
+  assert.ok(
+    spawned.some((npc) => npc.id === api.core.NpcIdentifiers.ME && npc.owner === fixture.player),
+    'login reconciliation spawns the saved fight actor'
+  );
+  assert.equal(fixture.attrs.get('quest.lunar_diplomacy.stage'), 165);
+});
+
+test('the readiness choice does not restart an already saved final fight', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = (spec) => { spawned.push(spec); return spec; };
+  api.removeNpc = () => {};
+  loadLunarPlugin(api);
+  const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
+  const fixture = lunarPlayer(api, {
+    stage: 165,
+    attributes: {
+      'quest.lunar_diplomacy.challenges': {
+        tree: { done: true, reported: true },
+        race: { done: true, reported: true },
+        number: { done: true, reported: true },
+        emote: { done: true, reported: true },
+        dice: { done: true, reported: true },
+        memory: { done: true, reported: true },
+      },
+    },
+  });
+  fixture.player.getLocation = () => new api.core.Location(1761, 5090, 2);
+  choice({
+    player: fixture.player,
+    npcId: api.core.NpcIdentifiers.ETHEREAL_BEING,
+    option: "Of course. I'm ready.",
+  });
+  assert.equal(fixture.attrs.get('quest.lunar_diplomacy.stage'), 165);
+  assert.equal(
+    spawned.filter((spec) => spec.id === api.core.NpcIdentifiers.ME && spec.owner === fixture.player).length,
+    0,
+    'the readiness dialogue is not a second fight trigger'
+  );
 });
 
 test('Fremennik Exiles yields Longhall Brundt to Lunar Seal recovery before its start menu', () => {

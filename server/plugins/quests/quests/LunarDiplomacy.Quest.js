@@ -1550,7 +1550,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
         player.moveTo(PIRATES_COVE_DOCKS);
         return;
       case "Perhaps it's the Navigator's fault?":
-        if (!BENTLEY_IDS.has(npcId) || stageOf(player) !== STAGE_CIRCLED) return;
+        if (!BENTLEY_IDS.has(npcId) || stageOf(player) !== STAGE_JACK_HINT) return;
         setStage(player, STAGE_NAVIGATOR);
         return;
       case "Ok, let's go!":
@@ -1647,7 +1647,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
         ferry(player, "rellekka-lokar", RELLEKKA_DOCK);
         return;
       case "szE3tO":
-        if (!BENTLEY_IDS.has(npcId) || stageOf(player) !== STAGE_SYMBOLS_DONE) return;
+        if (!BENTLEY_IDS.has(npcId) || stageOf(player) < STAGE_LUNAR_ISLE) return;
         if (!held(player, SEAL_OF_PASSAGE)) {
           reject(player, "Captain Bentley will not sail without a Seal of Passage.");
           return;
@@ -2481,9 +2481,14 @@ module.exports = function registerLunarDiplomacyQuest(api) {
   }
 
   function startFinalFight(player) {
-    if (!inDream(player) || stageOf(player) < STAGE_DREAM || stageOf(player) >= STAGE_FIGHT) return;
-    if (!allChallengesDone(player)) return;
-    setStage(player, STAGE_FIGHT);
+    const stage = stageOf(player);
+    if (!inDream(player) || stage < STAGE_DREAM || stage > STAGE_FIGHT) return;
+    if (stage < STAGE_FIGHT) {
+      if (!allChallengesDone(player)) return;
+      setStage(player, STAGE_FIGHT);
+    }
+    // Stage 165 also enters here from login reconciliation: the saved fight is
+    // restored even though the readiness dialogue may no longer be available.
     removeBoss(player);
     const npc = api.spawnNpc({
       id: NpcIdentifiers.ME,
