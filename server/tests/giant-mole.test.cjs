@@ -13,6 +13,18 @@ before(async () => {
   new NpcDefinitionLoader().load();
   core = PluginManager.getCoreApi();
 });
+const NpcDefinition = require('../dist/game/definition/NpcDefinition').NpcDefinition;
+
+test('the mole fights with its own combat anims from the combat defs at speed 4', t => {
+  const defs = require('../data/definitions/npc-combat-defs.json').npcs;
+  assert.deepEqual(defs['5779'].anims, { attack: 3312, block: 3311, death: 3310 });
+  const def = NpcDefinition.forId(5779);
+  assert.equal(def.getAttackAnim(), 3312, 'mole_attack');
+  assert.equal(def.getDefenceAnim(), 3311, 'mole_defend');
+  assert.equal(def.getDeathAnim(), 3310, 'mole_death');
+  assert.equal(def.getAttackSpeed(), 4, 'wiki attack speed');
+});
+
 function scene(t, hp = 80, random = 0) {
   const hooks = {}, tasks = [];
   const api = new Proxy({ core, getTaskManager: () => core.TaskManager,
