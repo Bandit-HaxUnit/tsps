@@ -7,12 +7,15 @@
  * the right to wear this yet." ("wield" for an item whose option is Wield), then "You need to
  * complete the <quest> quest first."
  *
+ * world.json pluginConfig `"quests:equipment-requirements": false` disables the check;
+ * it defaults to true, independently of PvP mode.
+ *
  * Not gated:
- *  - worlds with PvpMode on, where presets hand out this gear and players swap it by hand;
  *  - player bots, which gear up from loadouts rather than quests;
- *  - a quest this server doesn't have, so the item never becomes unwearable.
+ *  - disabled or missing quests, so the item never becomes unwearable.
  */
 const DATA = require("./data/quest-equipment.json");
+const EQUIPMENT_REQUIREMENTS_CONFIG = "quests:equipment-requirements";
 
 let pluginApi;
 /** Item id -> { quest, message } once built from the data file. */
@@ -30,12 +33,6 @@ function requirements() {
     }
   }
   return requirementByItem;
-}
-
-function pvpModeEnabled() {
-  const request = { enabled: false };
-  pluginApi.emitCustomEvent("pvp-mode:is-enabled", request);
-  return request.enabled === true;
 }
 
 /** True when the quest is done, or when this server has no such quest to do. */
@@ -60,10 +57,11 @@ function refuse(player, itemId, entry) {
 }
 
 function canEquip(event) {
+  if (pluginApi.getPluginConfig(EQUIPMENT_REQUIREMENTS_CONFIG, true) === false) return;
   const { player, item } = event;
   const itemId = item?.getId?.();
   const entry = requirements().get(itemId);
-  if (!entry || player.isPlayerBot?.() || pvpModeEnabled()) return;
+  if (!entry || player.isPlayerBot?.()) return;
   if (questComplete(player, entry.quest)) return;
   event.allow = false;
   refuse(player, itemId, entry);

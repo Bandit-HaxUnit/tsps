@@ -46,11 +46,6 @@ function openPresetsAfterDeath({ victim }) {
   TaskManager.submit(new OpenPresetsAfterDeath(victim));
 }
 
-/** Lets other plugins ask whether this world runs PvP mode: the plugin answers only when it is on. */
-function answerEnabled(request) {
-  request.enabled = true;
-}
-
 module.exports = {
   name: "PvpMode",
   register(api) {
@@ -58,6 +53,5 @@ module.exports = {
     Presets.register(api);
     api.registerCommand("presets", openPresets, undefined, "Open the presets interface");
     api.onPlayerDefeated(openPresetsAfterDeath);
-    api.onCustomEvent("pvp-mode:is-enabled", answerEnabled);
   },
 };
