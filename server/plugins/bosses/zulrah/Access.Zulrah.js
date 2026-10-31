@@ -12,8 +12,8 @@
  * The cache's boat (Board, Quick-Board) and priestess (Collect) forms follow the varbit. The stage
  * is saved; a player who has already killed Zulrah is past it.
  *
- * Wiki (/w/Zulrah): Regicide must be complete (the Wiki's "to the point of reaching Port Tyras",
- * the only way to Zul-Andra); the QuestRuntime answers quest:is-complete from its varp.
+ * Wiki (/w/Zulrah): Regicide must be played as far as Port Tyras (the only way to Zul-Andra), not
+ * completed; the QuestRuntime answers quest:get-stage for it.
  */
 
 const Shared = require("./Shared.Zulrah");
@@ -22,6 +22,11 @@ const ACCESS_ATTRIBUTE = "zulrah:access";
 /** The player is to be rowed out (the ritual's last line, or "Yes." to going back): Shrine sails. */
 const SAIL_EVENT = "zulrah:sail";
 const STAGE = Object.freeze({ NONE: 0, TOLD: 1, ACCEPTED: 2, SACRIFICED: 3 });
+/**
+ * Regicide's stage when the dense forest first opens the way to Tyras camp (STAGE_ENTERED_CAMP in
+ * Regicide.Quest.js). The Wiki requires progress to Port Tyras, not the finished quest.
+ */
+const REGICIDE_PORT_TYRAS_STAGE = 10;
 const HIGH_PRIESTESS = "High Priestess Zul-Harcinqa";
 const PRIESTESS = "Priestess Zul-Gwenwynig";
 
@@ -157,23 +162,23 @@ function advanceOnChoice(event) {
   if (asked && event.option === "Yes." && stageOf(player) >= STAGE.SACRIFICED) Shared.api().emitCustomEvent(SAIL_EVENT, { player });
 }
 
-/** The Wiki's other requirement: Regicide (answered by the quest runtime from its varp). */
-function regicideComplete(player) {
-  const request = { player, key: "regicide", complete: false };
-  Shared.api().emitCustomEvent("quest:is-complete", request);
-  return request.complete === true;
+/** Wiki: the boat needs Regicide played as far as Port Tyras, not completed. */
+function reachedPortTyras(player) {
+  const request = { player, key: "regicide", stage: 0 };
+  Shared.api().emitCustomEvent("quest:get-stage", request);
+  return request.stage >= REGICIDE_PORT_TYRAS_STAGE;
 }
 
 /**
- * Boarding before the High Priestess's leave, or without Regicide: the priestess's own
+ * Boarding before the High Priestess's leave, or before Port Tyras: the priestess's own
  * transcript for it.
  */
 function refuseBoarding(player) {
   const stage = stageOf(player);
-  const regicide = regicideComplete(player);
-  if (stage >= STAGE.SACRIFICED && regicide) return false;
-  // Without Regicide even her accepted transcript would row them out, so refuse as the boat's.
-  const variant = regicide && stage === STAGE.ACCEPTED ? VARIANT.priestess.accepted : VARIANT.priestess.board;
+  const portTyras = reachedPortTyras(player);
+  if (stage >= STAGE.SACRIFICED && portTyras) return false;
+  // Before Port Tyras even her accepted transcript would row them out, so refuse as the boat's.
+  const variant = portTyras && stage === STAGE.ACCEPTED ? VARIANT.priestess.accepted : VARIANT.priestess.board;
   Shared.api().emitCustomEvent("npc-dialogue:start", { player, npcId: Shared.core().NpcIdentifiers.PRIESTESS_ZUL_GWENWYNIG, variant, exact: true, handled: false });
   return true;
 }
@@ -193,4 +198,4 @@ function attach(api) {
   api.onCustomEvent("npc-dialogue:choice", advanceOnChoice);
 }
 
-module.exports = { attach, stageOf, refuseBoarding, regicideComplete, talkToPriestess, chooseVariant, STAGE, ACCESS_ATTRIBUTE, SAIL_EVENT, VARIANT };
+module.exports = { attach, stageOf, refuseBoarding, reachedPortTyras, REGICIDE_PORT_TYRAS_STAGE, talkToPriestess, chooseVariant, STAGE, ACCESS_ATTRIBUTE, SAIL_EVENT, VARIANT };
