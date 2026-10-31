@@ -47,16 +47,15 @@ function verbFor(itemId) {
   return actions.includes("Wield") ? "wield" : "wear";
 }
 
-function refuse(player, itemId, entry) {
-  if (entry.message) {
-    player.sendMessage(entry.message);
-    return;
-  }
-  player.sendMessage(`You have not earned the right to ${verbFor(itemId)} this yet.`);
-  player.sendMessage(`You need to complete the ${entry.quest} quest first.`);
+function refusalMessages(itemId, entry) {
+  return entry.message ? [entry.message] : [
+    `You have not earned the right to ${verbFor(itemId)} this yet.`,
+    `You need to complete the ${entry.quest} quest first.`,
+  ];
 }
 
-function canEquip(event) {
+/** quest:can-equip { player, item, allow, messages }: eligibility only, without equip actions. */
+function checkEquipment(event) {
   if (pluginApi.getPluginConfig(EQUIPMENT_REQUIREMENTS_CONFIG, true) === false) return;
   const { player, item } = event;
   const itemId = item?.getId?.();
@@ -64,12 +63,21 @@ function canEquip(event) {
   if (!entry || player.isPlayerBot?.()) return;
   if (questComplete(player, entry.quest)) return;
   event.allow = false;
-  refuse(player, itemId, entry);
+  event.messages = refusalMessages(itemId, entry);
+}
+
+function canEquip(event) {
+  const request = { player: event.player, item: event.item, allow: true, messages: [] };
+  checkEquipment(request);
+  if (request.allow) return;
+  event.allow = false;
+  for (const message of request.messages) event.player.sendMessage(message);
 }
 
 module.exports = function attachEquipment(api) {
   pluginApi = api;
   api.onCanEquip(canEquip);
+  api.onCustomEvent("quest:can-equip", checkEquipment);
 };
 
 module.exports._test = { canEquip, requirements };

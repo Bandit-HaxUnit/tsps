@@ -14,6 +14,7 @@ attachEquipment({
     CacheDefinitions: { getItem: (id) => ({ inventoryActions: [null, WIELD.has(id) ? "Wield" : "Wear"] }) },
   },
   onCanEquip: (handler) => { world.canEquip = handler; },
+  onCustomEvent: (_name, handler) => { world.checkEquipment = handler; },
   getPluginConfig: (key, fallback) => world.pluginConfig[key] ?? fallback,
   emitCustomEvent(name, request) {
     if (name === "pvp-mode:is-enabled" && world.pvpMode) request.enabled = true;
@@ -93,4 +94,21 @@ test("bots and ungated items are left alone", () => {
 test("disabled or missing quests leave equipment wearable with requirements enabled", () => {
   reset({ equipmentRequirements: true });
   assert.deepEqual(equip(Items.DRAGON_DAGGER), { allow: null, messages: [] });
+});
+
+test("quest eligibility queries return refusal text without messaging or equipping the player", () => {
+  reset({ complete: { "Lost City": false } });
+  const request = {
+    player: { sendMessage: () => assert.fail("a query must not send messages") },
+    item: { getId: () => Items.DRAGON_DAGGER }, allow: true, messages: [],
+  };
+  world.checkEquipment(request);
+  assert.equal(request.allow, false);
+  assert.equal(request.messages[1], "You need to complete the Lost City quest first.");
+  reset({ equipmentRequirements: false, complete: { "Lost City": false } });
+  request.allow = true;
+  request.messages = [];
+  world.checkEquipment(request);
+  assert.equal(request.allow, true);
+  assert.deepEqual(request.messages, []);
 });

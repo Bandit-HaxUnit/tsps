@@ -410,6 +410,7 @@ test("quest requirements validate the whole preset before changing gear and allo
     getVarbit: () => 0, getVarp: () => 0,
   }, { get: (target, key) => target[key] ?? (() => sender) });
   const player = new Player(null);
+  player.setSkullTimer(0);
   player.getPacketSender = () => sender;
   player.resetAttributes = () => {};
   player.getInventory().addItem(new Item(Items.COINS, 500));
@@ -452,6 +453,35 @@ test("quest requirements validate the whole preset before changing gear and allo
   assert.equal(presets.applyPreset(player, preset), true, "the config override also applies to preset loads");
   switchWeapon(Items.DRAGON_DAGGER_P_PLUS_PLUS_);
   switchWeapon(Items.DRAGON_SCIMITAR);
+
+  const { Presetable } = require("../dist/game/content/presets/Presetable");
+  require("../plugins/items/CapeOfSkulls.plugin").register(api);
+  let dialogues = 0;
+  const manager = player.getDialogueManager();
+  const startDialogues = manager.startDialogues.bind(manager);
+  manager.startDialogues = (...args) => { dialogues++; return startDialogues(...args); };
+  player.getInventory().resetItems().addItem(new Item(Items.CAPE_OF_SKULLS, 1));
+  player.getEquipment().resetItems().refreshItems();
+  requirementsEnabled = true;
+  incomplete.add("Lost City");
+  const cape = new Item(Items.CAPE_OF_SKULLS, 1);
+  const stats = [99, 99, 99, 99, 99, 99, 99];
+  const blocked = new Presetable("Cape and locked switch", [cape, new Item(Items.DRAGON_DAGGER, 1)], [], stats, MagicSpellbook.NORMAL, false);
+  const beforeRefusal = snapshot();
+  assert.equal(presets.applyPreset(player, blocked), false);
+  assert.deepEqual(snapshot(), beforeRefusal);
+  assert.equal(dialogues, 0, "a refused preset must not open the inventory cape's wear confirmation");
+  assert.equal(player.getSkullTimer(), 0);
+
+  const inventoryCape = new Presetable("Inventory cape", [cape], [], stats, MagicSpellbook.NORMAL, false);
+  assert.equal(presets.applyPreset(player, inventoryCape), true, "carrying a cape is not wearing it");
+  assert.equal(dialogues, 0);
+  assert.equal(player.getEquipment().get(Equipment.CAPE_SLOT).getId(), -1);
+  assert.equal(player.getInventory().getAmount(Items.CAPE_OF_SKULLS), 1);
+  assert.equal(player.getSkullTimer(), 0);
+  EquipPacketListener.equip(player, Items.CAPE_OF_SKULLS, player.getInventory().getSlotForItemId(Items.CAPE_OF_SKULLS), Inventory.INTERFACE_ID);
+  assert.equal(dialogues, 1, "an actual Wear click still opens the normal confirmation");
+  assert.equal(player.getSkullTimer(), 0);
 });
 
 test("dropping a preset item destroys it without the confirmation interface", () => {
