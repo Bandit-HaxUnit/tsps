@@ -70,6 +70,20 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
   const LAMP_MIN_LEVEL = 40;
   const LAMP_XP = 10_000;
   const PAGE_VALUE = 1_000;
+  const MAX_STACK_AMOUNT = 0x7fffffff;
+
+  /**
+   * Aimeri accepts cooked fish, meat and vegetables (Wiki). The cache only exposes
+   * an Eat action, so classify by the item name: sweets, cakes, bread, fruit and
+   * drinks are not in these families.
+   */
+  const FISH_FOOD_NAME = /fish|shrimp|sardine|anchov|herring|mackerel|trout|cod|pike|salmon|tuna|lobster|bass|swordfish|monkfish|shark|turtle|manta|angler|crab|eel|karambwan|jubbly|bluefin|bream|haddock|halibut|marlin|squid|paddlefish|loach|carp|krill|roe|caviar|fillet|yellowfin|brawk|pysk|leckish|kyren|mycil|roqed|suphi/i;
+  const MEAT_FOOD_NAME = /meat|chicken|rabbit|kebbit|graahk|kyatt|larupia|chompy|oomlie|beef|steak|sausage|bacon|ham|turkey|carne|kebab|jerky|snail|frog|locust|antelope|lizard|fox|shish|bird|\bbat\b|worm|spider|grub|toad|snake/i;
+  const VEGETABLE_FOOD_NAME = /cabbage|onion|potato|tomato|sweetcorn|corn|pumpkin|mushroom|seaweed|veg|vegetable|chilli|chili|spinach|eggplant|avocado|carrot|pepper|beet|artichoke|asparagus|broccoli|cauliflower|celery|cucumber|leek|lettuce|parsnip|\bpeas?\b|radish|turnip|zucchini|\btom\b/i;
+  /** Stews, curries and pies whose name does not carry the ingredient word. */
+  const WHOLE_DISH_FOOD_NAMES = new Set([
+    "Admiral pie", "Botanical pie", "Curry", "Garden pie", "Stew", "Wild pie",
+  ]);
 
   const TOMES = Object.freeze([
     {
@@ -195,13 +209,18 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
 
   function hasFood(player) {
     return inventory(player).getItems().some((item) =>
-      item && isCookedFood(item.getId?.() ?? item.id));
+      item && isAimeriFood(item.getId?.() ?? item.id));
   }
 
-  /** An edible item: the cache's Eat action only exists on cooked food and drink. */
-  function isCookedFood(itemId) {
+  /** An edible item in Aimeri's accepted families: cooked fish, meat or vegetables. */
+  function isAimeriFood(itemId) {
     const definition = api.core.CacheDefinitions.getItem(itemId);
-    return !!definition && (definition.inventoryActions ?? []).includes("Eat");
+    if (!definition || !(definition.inventoryActions ?? []).includes("Eat")) return false;
+    const name = String(definition.name ?? "");
+    return WHOLE_DISH_FOOD_NAMES.has(name)
+      || FISH_FOOD_NAME.test(name)
+      || MEAT_FOOD_NAME.test(name)
+      || VEGETABLE_FOOD_NAME.test(name);
   }
 
   function answerCondition({ npcId, player, text }) {
@@ -286,14 +305,14 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
     event.handled = true;
     const healed = event.npcId === AIMERI_HEALED || fedOf(player) >= AIMERI_FED;
     if (!healed) {
-      if (isCookedFood(itemId)) {
+      if (isAimeriFood(itemId)) {
         feedAimeri(player, itemId, event.slot);
         return;
       }
       say(player, AIMERI_INJURED, "No thanks. I would rather eat fish, meat or vegetables.");
       return;
     }
-    if (isCookedFood(itemId)) {
+    if (isAimeriFood(itemId)) {
       say(player, AIMERI_HEALED, "No thanks, I'm not hungry anymore.");
       return;
     }
@@ -437,9 +456,19 @@ module.exports = function registerInSearchOfKnowledgeQuest(api) {
     if (!entry || !quest.isComplete(player)) return;
     const amount = inventory(player).getAmount(itemId);
     if (amount < 1) return;
+    const payout = amount * PAGE_VALUE;
+    // A capped coin stack would clamp adds() after the pages were already deleted.
+    // Refuse first and keep the pages; a sale always frees the slot for a new stack.
+    const coins = new api.core.Item(COINS, payout);
+    const hasCoinStack = inventory(player).getAmount(COINS) > 0;
+    if (payout > MAX_STACK_AMOUNT
+      || (hasCoinStack && inventory(player).getAddableAmount(coins) < payout)) {
+      player.sendMessage("You do not have enough room to carry all of those coins.");
+      return;
+    }
     inventory(player).deleteNumber(itemId, amount);
-    inventory(player).adds(COINS, amount * PAGE_VALUE);
-    player.sendMessage(`You sell ${amount} ${entry.kind} page${amount === 1 ? "" : "s"} to Logosia for ${(amount * PAGE_VALUE).toLocaleString("en-US")} coins.`);
+    inventory(player).adds(COINS, payout);
+    player.sendMessage(`You sell ${amount} ${entry.kind} page${amount === 1 ? "" : "s"} to Logosia for ${payout.toLocaleString("en-US")} coins.`);
   }
 
   function useItemOnLogosia(event) {
