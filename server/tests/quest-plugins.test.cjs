@@ -20504,6 +20504,36 @@ test('Song of the Elves prison entry keeps Elena visible and cannot release her 
 });
 
 
+test('Song of the Elves prison stair routes to its open foot, not the exit landing behind the wall', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const route = handlers.routes.find(handler => handler.name === 'routeCastleThroneStairs');
+  const event = { player: { getLocation: () => new api.core.Location(2569, 3298, 0) },
+    object: { getLocation: () => new api.core.Location(2569, 3295, 0) },
+    objectId: 35791, sourceLocation: { x: 2569, y: 3298, z: 0 }, destination: null };
+  route(event);
+  assert.equal(event.destination, null, 'the prison stair keeps the normal walk-to-object route');
+
+  const finder = new api.core.RsmodRouteFinding();
+  const spec = { level: 0, srcSize: 1, moveNear: true, maxWaypoints: 25, privateArea: null,
+    destX: 2569, destY: 3295, destWidth: 2, destLength: 3, locAngle: 0, locShape: 10, blockAccessFlags: 30 };
+  const foot = finder.findRoute({ ...spec, srcX: 2569, srcY: 3298 });
+  assert.equal(foot.success, true);
+  assert.deepEqual([foot.endX, foot.endY], [2569, 3298], 'the stair is used from its open foot');
+  assert.equal(finder.reachedAbsolute({ ...spec, srcX: 2569, srcY: 3298 }), true);
+  const acrossLobby = finder.findRoute({ ...spec, srcX: 2574, srcY: 3298 });
+  assert.equal(acrossLobby.success, true);
+  assert.equal(finder.reachedAbsolute({ ...spec, srcX: acrossLobby.endX, srcY: acrossLobby.endY }), true,
+    'walking to the stair from across the lobby ends in its interaction rectangle');
+
+  const oldLanding = finder.findRoute({ level: 0, srcX: 2569, srcY: 3298, srcSize: 1, moveNear: true,
+    maxWaypoints: 25, privateArea: null, destX: 2571, destY: 3293, destWidth: 1, destLength: 1,
+    locAngle: 0, locShape: -1, blockAccessFlags: 0 });
+  assert.notDeepEqual([oldLanding.endX, oldLanding.endY], [2571, 3293],
+    'the removed exit landing is behind the castle wall and cannot be routed to from the lobby');
+});
+
+
 test('Song of the Elves bed leads through the full resistance briefing before recruitment', () => {
   const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
   const original = runtime.startTranscript, played = [];
