@@ -211,7 +211,10 @@ module.exports = function registerLostCityQuest(api) {
   function answerCondition({ player, text }) {
     const value = String(text).toLowerCase();
     if (value.includes("lower than 45 combat")) {
-      return missingSkillRequirements(player).length > 0;
+      return (
+        player.getSkillManager().getCombatLevel() < 45 &&
+        missingSkillRequirements(player).length > 0
+      );
     }
     return null;
   }
