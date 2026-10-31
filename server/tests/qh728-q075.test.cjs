@@ -713,7 +713,8 @@ test("Monkey Madness I: Daero's Travel in the Grand Tree returns the player to t
 
 test('Monkey Madness I: the Bamboo Gate crosses through its one gap', () => {
   const { h, p } = monkeyMadness();
-  h.quest.setStage(p, 7);
+  h.quest.setStage(p, 8);
+  equip(p, core.Equipment.WEAPON_SLOT, I.KARAMJAN_MONKEY_GREEGREE); // only a monkey passes
   p.moveTo(new core.Location(2719, 2764, 0));
   assert.equal(h.object(p, O.BAMBOO_GATE, 'Open').handled, true);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2720, 2767]);
@@ -765,4 +766,77 @@ test('Monkey Madness I: Narnode plays the after-quest talk until Monkey Madness 
   assert.equal(h.variant(p, N.KING_NARNODE_SHAREEN).variant, 'after-monkey-madness-i');
   mm2Stage = 5;
   assert.equal(h.variant(p, N.KING_NARNODE_SHAREEN), null, 'a started Monkey Madness II owns Narnode');
+});
+
+test('Monkey Madness I: a human is jailed on every approach; Lumo counts the catches', () => {
+  const { h, p } = monkeyMadness();
+  const starts = [];
+  h.api.onCustomEvent('npc-dialogue:start', event => starts.push(event.variant));
+  h.quest.setStage(p, 7);
+  const atCell = () => p.getLocation().getX() === 2772 && p.getLocation().getY() === 2795;
+
+  h.zone(p);
+  assert.ok(atCell(), 'the first approach jails the player');
+  h.object(p, O.JAIL_DOOR, 'Pick-lock');
+  assert.equal(p.getAttribute('quest.monkey_madness_i.jail'), 2);
+  h.zone(p);
+  assert.ok(atCell(), 'so does every later one (wiki: "placed in the jail cell again")');
+  assert.equal(p.getAttribute('quest.monkey_madness_i.jail'), 1, 'the lock can be picked again');
+  assert.equal(p.getAttribute('quest.monkey_madness_i.jail-count'), 2);
+  assert.ok(p.messages.includes('You have been hit by poisoned arrows and knocked out!'));
+
+  p.moveTo(new core.Location(2720, 2764, 0));
+  h.object(p, O.BAMBOO_GATE, 'Open');
+  assert.ok(atCell(), 'a human opening the Bamboo Gate is shot down too');
+
+  p.setAttribute('quest.monkey_madness_i.jail-count', 9);
+  assert.equal(h.condition(p, N.LUMO_3, 'rpSCo_'), false);
+  h.zone(p);
+  assert.equal(h.condition(p, N.LUMO_3, 'rpSCo_'), true, 'the tenth catch plays "ten times now"');
+  assert.equal(h.condition(p, N.LUMO_3, '2JIjG3'), false);
+
+  p.setAttribute('quest.monkey_madness_i.jail-count', 100);
+  h.action(p, N.LUMO_3, 'rB_S-V');
+  assert.equal(p.inventory.getAmount(I.STUFFED_MONKEY), 1, 'Lumo throws the stuffed monkey');
+
+  equip(p, core.Equipment.WEAPON_SLOT, I.KARAMJAN_MONKEY_GREEGREE);
+  p.moveTo(new core.Location(2720, 2750, 0));
+  h.zone(p);
+  assert.equal(p.getLocation().getY(), 2750, 'monkey form walks past the archers');
+  equip(p, core.Equipment.WEAPON_SLOT, -1);
+  h.quest.setStage(p, 9);
+  h.zone(p);
+  assert.equal(p.getLocation().getY(), 2750, 'no jail once the quest is complete');
+});
+
+test('Monkey Madness I: the sent-back page is a random block plus the catch-count conditions', () => {
+  // The plugin plays either one count condition (by id) or the random block; that only
+  // holds while the export keeps this shape.
+  const pages = require('../data/definitions/npc-dialogues.json');
+  const page = pages['Monkey Madness I'].variants['chapter-2-getting-sent-back-to-jail'];
+  assert.equal(page.filter(step => step.type === 'random').length, 1);
+  assert.deepEqual(page.filter(step => step.type === 'condition').map(step => step.id),
+    ['rpSCo_', '2JIjG3', 'KVGnoh', 'k9jVap', 'YoHOAf']);
+});
+
+test('Monkey Madness I: the south-east bridge ladder, the jump and the hangar exit', () => {
+  const { h, p } = monkeyMadness();
+  const climbs = captureClimbs(h);
+  p.moveTo(new core.Location(2803, 2735, 0));
+  const up = climbRequest(p, O.BAMBOO_LADDER, 2803, 2734, 0);
+  h.emit('ladders:climb', up);
+  assert.equal(up.handled, true, 'Ladders finds nothing on plane 1 above this ladder');
+  assert.deepEqual(tile(climbs.at(-1)), [2803, 2733, 2]);
+  const down = climbRequest(p, O.BAMBOO_LADDER_2, 2803, 2734, 2);
+  h.emit('ladders:climb', down);
+  assert.equal(down.handled, true);
+  assert.deepEqual(tile(climbs.at(-1)), [2803, 2735, 0]);
+
+  p.moveTo(new core.Location(2803, 2728, 2));
+  assert.equal(h.object(p, O.END_OF_BRIDGE, 'Jump off').handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2806, 2724, 0]);
+
+  p.moveTo(new core.Location(2398, 9872, 0));
+  assert.equal(h.object(p, O.TELEPORTATION_DEVICE_2, 'Operate').handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2393, 3466]);
 });
