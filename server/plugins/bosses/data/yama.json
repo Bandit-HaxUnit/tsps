@@ -704,7 +704,7 @@
         "delay": 0
       },
       "hitTicks": 5,
-      "maxHit": 60,
+      "maxHit": 80,
       "rootTicks": 2,
       "prayerDrainShare": 0.33
     },

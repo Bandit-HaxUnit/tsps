@@ -233,3 +233,14 @@ test("opening a Forgotten lockbox consumes it and gives its reward", () => {
   assert.equal(player.message, entry.message);
   assert.equal(open({ player, itemId: 30764 }), false, "only the lockbox's own Open is handled");
 });
+
+test("Yama's specials use the Wiki's damage numbers", () => {
+  const { specials, flares, judge } = Common.data;
+  assert.equal(specials.rockfall.maxHit, 46);
+  assert.equal(specials.spike.maxHit, 46);
+  assert.deepEqual(specials.meteor.byDistance, [[1, "kill"], [2, 80], [3, 40]]);
+  assert.equal(specials.stomp.maxHit, 80);
+  assert.deepEqual(flares.damage["1"], [42, 45]);
+  assert.deepEqual(flares.damage["3"], [23, 25]);
+  assert.equal(judge.surge.maxHit, 30);
+});
