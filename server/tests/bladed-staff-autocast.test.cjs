@@ -79,3 +79,54 @@ test("a plain staff still uses Focus and Pound", () => {
   Autocasting.handleWidgetAction(player, 593, 23);
   assert.equal(player.fightType, FightType.STAFF_FOCUS);
 });
+
+// Review of #1672: switching from an Ancient staff to a bladed staff mustn't keep autocasting Ice
+// Barrage (wiki: Staff of the Dead can't autocast Ancient Magicks), while compatible spells carry over.
+const { Player } = require("../dist/game/entity/impl/player/Player");
+const { Item } = require("../dist/game/model/Item");
+const { Inventory } = require("../dist/game/model/container/impl/Inventory");
+const { EquipPacketListener } = require("../dist/net/packet/impl/EquipPacketListener");
+const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
+const { CombatSpells } = require("../dist/game/content/combat/magic/CombatSpells");
+const { Skill } = require("../dist/game/model/Skill");
+
+/** A real player on `spellbook`, carrying `first` and `second`, wielding `first` with `spell` autocast. */
+function switching(spellbook, first, second, spell) {
+  const p = new Player(null);
+  p.getPacketSender = () => new Proxy({}, { get: () => () => p.getPacketSender() });
+  p.setSpellbook(spellbook);
+  for (const skill of [Skill.ATTACK, Skill.MAGIC]) p.getSkillManager().setLevel(skill, 99);
+  p.getInventory().setItem(0, new Item(first, 1));
+  p.getInventory().setItem(1, new Item(second, 1));
+  EquipPacketListener.equip(p, first, 0, Inventory.INTERFACE_ID);
+  Autocasting.setAutocast(p, spell);
+  assert.equal(p.getCombat().getAutocastSpell(), spell, "the first weapon autocasts the spell");
+  EquipPacketListener.equip(p, second, 1, Inventory.INTERFACE_ID);
+  assert.equal(p.getEquipment().getWeapon().getId(), second);
+  return p;
+}
+
+test("switching from an Ancient staff to a Staff of the Dead drops an ancient autocast", () => {
+  for (const id of BLADED_STAVES) {
+    const p = switching(MagicSpellbook.ANCIENT, ItemIdentifiers.ANCIENT_STAFF, id, CombatSpells.ICE_BARRAGE);
+    assert.equal(p.getCombat().getAutocastSpell(), null, `${id}`);
+    assert.notEqual(CombatFactory.getMethod(p), CombatFactory.MAGIC_COMBAT, `${id}`);
+  }
+});
+
+test("bladed staves refuse the ancient selector but keep standard and Arceuus autocasts", () => {
+  for (const id of BLADED_STAVES) {
+    const player = wielding(id, MagicSpellbook.ANCIENT);
+    Autocasting.handleWidgetAction(player, 593, 28);
+    assert.deepEqual(player.sent.subInterfaces, [], `${id}`);
+  }
+
+  const standard = switching(MagicSpellbook.NORMAL, ItemIdentifiers.STAFF_OF_FIRE,
+    ItemIdentifiers.STAFF_OF_THE_DEAD, CombatSpells.FIRE_WAVE);
+  assert.equal(standard.getCombat().getAutocastSpell(), CombatSpells.FIRE_WAVE);
+  assert.equal(CombatFactory.getMethod(standard), CombatFactory.MAGIC_COMBAT);
+
+  const arceuus = switching(MagicSpellbook.ARCEUUS, ItemIdentifiers.KODAI_WAND,
+    ItemIdentifiers.TOXIC_STAFF_OF_THE_DEAD, CombatSpells.SKELETAL_GRASP);
+  assert.equal(arceuus.getCombat().getAutocastSpell(), CombatSpells.SKELETAL_GRASP);
+});
