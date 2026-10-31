@@ -20,6 +20,7 @@ const QUESTS = [
   "CabinFever", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
+  "DaddysHome",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
   // BearYourSoul also searches the Arceuus Library shelves; DepthsOfDespair's active
   // book step must claim that shared search first.

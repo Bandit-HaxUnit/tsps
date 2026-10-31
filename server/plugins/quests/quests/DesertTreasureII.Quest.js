@@ -816,15 +816,17 @@ module.exports = function registerDesertTreasureII(api) {
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
     constructor(owner) {
-      super(4, 4);
+      super(8, 8);
       this.owner = owner;
-      // Cache room coordinates 3920..3951, 9616..9647 occupy chunks 490..493,
-      // 1202..1205 on plane 1. Copy the exact Ancient Vault cache template.
-      for (let x = 0; x < 4; x++) {
-        for (let y = 0; y < 4; y++) {
+      // Live builds the whole map square 3904..3967, 9600..9663 (chunks 488..495,
+      // 1200..1207) on planes 0-2, each onto its own plane (rsprox capture 1703).
+      // The room stands on plane 1, but its sunken centre floor is on plane 0 and
+      // its upper structure on plane 2; without them the client draws void there.
+      for (let x = 0; x < 8; x++) {
+        for (let y = 0; y < 8; y++) {
           for (let plane = 0; plane < 4; plane++) {
-            this.setChunk(plane, x, y, plane === 1 ? {
-              sourceChunkX: 490 + x, sourceChunkY: 1202 + y, sourcePlane: 1, rotation: 0,
+            this.setChunk(plane, x, y, plane < 3 ? {
+              sourceChunkX: 488 + x, sourceChunkY: 1200 + y, sourcePlane: plane, rotation: 0,
             } : null);
           }
         }
@@ -1865,18 +1867,18 @@ module.exports = function registerDesertTreasureII(api) {
     sender.sendInterface(WOOD_PLAQUE_GROUP);
   }
   function enterVault(p) {
-    // shortcut: arrival beside the cache entrance steps is collision-verified; calibrate the exact tile against a live OSRS entry capture.
+    // Live arrival is 3929,9631 on plane 1, three tiles west of Asgarnia Smith at 3932,9631 (rsprox capture 1703).
     const current = p.getAttribute(ATTR_VAULT_AREA);
     if (current instanceof AncientVaultArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(10, 15, 1));
+      p.moveTo(current.tile(25, 31, 1));
       return current;
     }
     const area = new AncientVaultArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_VAULT_AREA, area);
-    p.moveTo(area.tile(10, 15, 1));
-    const smith = api.core.NPC.create(ASGARNIA_SMITH_VAULT_INITIAL, area.tile(12, 15, 1));
+    p.moveTo(area.tile(25, 31, 1));
+    const smith = api.core.NPC.create(ASGARNIA_SMITH_VAULT_INITIAL, area.tile(28, 31, 1));
     smith.setOwner?.(p);
     smith.setOwnerOnly?.(true);
     smith.__skipDefaultRespawn = true;
@@ -3874,9 +3876,9 @@ module.exports = function registerDesertTreasureII(api) {
   function vaultSourceTile(p, location) {
     const area = p.getAttribute(ATTR_VAULT_AREA);
     if (!area || typeof area.getBaseX !== "function" || typeof area.getBaseY !== "function" || area.isDestroyed?.() || !location) return null;
-    const x = location.x - area.getBaseX() + 3920;
-    const y = location.y - area.getBaseY() + 9616;
-    return x >= 3920 && x < 3952 && y >= 9616 && y < 9648 ? { x, y } : null;
+    const x = location.x - area.getBaseX() + 3904;
+    const y = location.y - area.getBaseY() + 9600;
+    return x >= 3904 && x < 3968 && y >= 9600 && y < 9664 ? { x, y } : null;
   }
 
   function finalRoomSourceTile(p, location) {

@@ -7498,14 +7498,18 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     assert.equal(objectInteractions.find(h => h.name === 'handleObjectInteraction')(outerDoor), true);
     assert.equal(quest.getStage(player), 1);
     const area = attrs.get('desert-treasure-ii:ancient-vault');
-    assert.equal(area.width, 4);
-    assert.equal(area.height, 4);
-    assert.equal(player.location.x, 8202);
-    assert.equal(player.location.y, 1615);
+    assert.equal(area.width, 8);
+    assert.equal(area.height, 8);
+    assert.equal(player.location.x - area.getBaseX() + 3904, 3929, 'live arrival tile');
+    assert.equal(player.location.y - area.getBaseY() + 9600, 9631);
     assert.equal(queues.add[0].id, 12291, 'the room receives the cache Asgarnia Smith variant with Talk-to');
-    assert.equal(chunks.filter(([plane, , , chunk]) => plane === 1 && chunk !== null).length, 16);
+    for (const plane of [0, 1, 2]) {
+      assert.equal(chunks.filter(([p, , , chunk]) => p === plane && chunk?.sourcePlane === plane).length, 64,
+        `the whole map square is copied onto plane ${plane}, as live builds it`);
+    }
+    assert.equal(chunks.filter(([plane, , , chunk]) => plane === 3 && chunk !== null).length, 0);
     const inspect = (id, x, y) => objectInteractions.find(h => h.name === 'handleObjectInteraction')({
-      player, objectId: id, location: area.tile(x - 3920, y - 9616, 1),
+      player, objectId: id, location: area.tile(x - 3904, y - 9600, 1),
     });
     assert.equal(inspect(49499, 3941, 9635), true);
     assert.equal(varbits.get(15106), 1, 'the Vardorvis statue sets dt2_vault_statue_vardorvis (rsprox 1703)');
@@ -7580,7 +7584,7 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
   attrs.set('desert-treasure-ii:first-medallion-meeting', true);
   assert.equal(objectHooks[0]({ player: p, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } }), true);
   const area = attrs.get('desert-treasure-ii:ancient-vault');
-  const location = area.tile(21, 19, 1);
+  const location = area.tile(37, 35, 1);
   assert.equal(itemHooks[0]({ player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49501, location }), undefined,
     'a medallion cannot be placed on another general’s statue');
   assert.equal(counts.get(I.VARDORVIS_MEDALLION), 1);
@@ -7643,7 +7647,7 @@ test('Desert Treasure II consumes the four earned medallions in route order befo
   const placement = (id, index, medal) => {
     counts.set(medal, 1);
     const [x, y] = [[3941, 9635], [3931, 9635], [3931, 9625], [3941, 9625]][index];
-    const event = { player, itemId: medal, objectId: id, location: area.tile(x - 3920, y - 9616, 1), handled: false };
+    const event = { player, itemId: medal, objectId: id, location: area.tile(x - 3904, y - 9600, 1), handled: false };
     itemHooks[0](event);
     return event;
   };
@@ -7713,8 +7717,9 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
       'the scene does not skip the Mysterious Figure dialogue');
     customEvents.find(({ name }) => name === 'npc-dialogue:action').handler({ player, stepId: 'NoRYcT' });
     assert.ok(attrs.get('desert-treasure-ii:ancient-vault'), 'the dialogue action resumes the vault scene');
-    assert.equal(player.location.x, 8202);
-    assert.equal(player.location.y, 1615);
+    const vault = attrs.get('desert-treasure-ii:ancient-vault');
+    assert.equal(player.location.x - vault.getBaseX(), 25);
+    assert.equal(player.location.y - vault.getBaseY(), 31);
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -8770,7 +8775,7 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
       'the cache staircase returns the player to the upper Ancient Vault');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
-    assert.equal(p.location.x, 8202, 'the player is back in the private upper vault');
+    assert.equal(p.location.x - attrs.get('desert-treasure-ii:ancient-vault').getBaseX(), 25, 'the player is back in the private upper vault');
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -11360,7 +11365,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   });
   const statue = 49503;
   statueAction({ player, itemId: I.SUCELLUS_MEDALLION, objectId: statue,
-    location: { x: 5022, y: 6018, z: 1 } });
+    location: { x: 5038, y: 6034, z: 1 } });
   assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 0,
     'an earned legacy medallion can still be placed at the Sucellus statue');
   assert.equal(quest.getStage(player), 10, 'placing the legacy medal does not rewind or advance the saved quest stage');
@@ -14918,6 +14923,372 @@ test('completed Lunar Diplomacy players can replace a lost Seal of Passage from 
   }
 });
 
+
+function lunarPlayer(api, { stage = 0, items = {}, attributes = {}, spellbook = null } = {}) {
+  const inventory = new Map(Object.entries(items).map(([id, amount]) => [Number(id), amount]));
+  const attrs = new Map(Object.entries(attributes));
+  attrs.set('quest.lunar_diplomacy.stage', stage);
+  const equipment = new Map();
+  const messages = [];
+  const moves = [];
+  if (spellbook) equipment.set('spellbook', spellbook);
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => { if (value === null) attrs.delete(key); else attrs.set(key, value); },
+    getInventory: () => ({
+      getAmount: (id) => inventory.get(id) ?? 0,
+      getItems: () => [...inventory].filter(([, amount]) => amount > 0)
+        .map(([id, amount]) => ({ getId: () => id, getAmount: () => amount })),
+      add: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      adds: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount = 1) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)),
+      getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
+    }),
+    getEquipment: () => ({
+      get: (slot) => equipment.has(slot) ? { getId: () => equipment.get(slot) } : null,
+      hasStaffEquipped: () => false,
+    }),
+    getPacketSender: () => noopPacketSender,
+    sendMessage: (message) => messages.push(message),
+    getLocation: () => new api.core.Location(2150, 3868, 0),
+    moveTo: (tile) => moves.push(tile),
+    getSpellbook: () => spellbook,
+    setSpellbook: (book) => { spellbook = book; },
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    performAnimation: () => {},
+    isPlayerBot: () => false,
+  };
+  return { player, inventory, attrs, equipment, messages, moves, get spellbook() { return spellbook; } };
+}
+
+function loadLunarPlugin(api) {
+  delete require.cache[require.resolve('../plugins/quests/quests/LunarDiplomacy.Quest')];
+  require('../plugins/quests/quests/LunarDiplomacy.Quest')(api);
+}
+
+function dispatchObjectHandler(handlers, event) {
+  for (const handler of handlers.objects) {
+    const attempt = { ...event, handled: false };
+    const result = handler(attempt);
+    if (result === true && attempt.handled) return attempt;
+  }
+  return null;
+}
+
+test('Astral Altar refuses Lunar Diplomacy access until completion, then toggles the Lunar spellbook', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const originalChangeSpellbook = api.core.MagicSpellbook.changeSpellbook;
+  let transcript = null;
+  runtime.startTranscript = (...args) => { transcript = args.slice(3, 5); return true; };
+  api.core.MagicSpellbook.changeSpellbook = (player, book) => player.setSpellbook(book);
+  try {
+    loadLunarPlugin(api);
+    const before = lunarPlayer(api, { stage: 150 });
+    const refusedCraft = dispatchObjectHandler(handlers, {
+      player: before.player,
+      objectId: api.core.ObjectIdentifiers.ALTAR_57,
+      option: 'craft-rune',
+    });
+    assert.ok(refusedCraft, 'the quest claims the Astral Altar before completion');
+    assert.deepEqual(transcript, ['Lunar Diplomacy', 'lunar-isle-trying-to-craft-a-rune-at-the-astral-altar']);
+
+    const refusedPray = dispatchObjectHandler(handlers, {
+      player: before.player,
+      objectId: api.core.ObjectIdentifiers.ALTAR_57,
+      option: 'pray',
+    });
+    assert.ok(refusedPray);
+    assert.deepEqual(transcript, ['Lunar Diplomacy', 'lunar-isle-trying-to-pray-at-the-astral-altar']);
+
+    const after = lunarPlayer(api, { stage: 190 });
+    const toggled = dispatchObjectHandler(handlers, {
+      player: after.player,
+      objectId: api.core.ObjectIdentifiers.ALTAR_57,
+      option: 'pray',
+    });
+    assert.ok(toggled);
+    assert.equal(after.spellbook, api.core.MagicSpellbook.LUNAR, 'Pray activates the Lunar spellbook');
+    assert.ok(after.messages.includes('Lunar spells activated!'));
+
+    const toggledBack = dispatchObjectHandler(handlers, {
+      player: after.player,
+      objectId: api.core.ObjectIdentifiers.ALTAR_57,
+      option: 'pray',
+    });
+    assert.ok(toggledBack);
+    assert.equal(after.spellbook, api.core.MagicSpellbook.NORMAL, 'Pray again returns to the standard spellbook');
+    assert.ok(after.messages.includes('Lunar spells deactivated!'));
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+    api.core.MagicSpellbook.changeSpellbook = originalChangeSpellbook;
+  }
+});
+
+test('Suqah tiara drops wait for Meteora and never duplicate the Lunar amulet', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const handler = handlers.custom.get('npc-drops:quest-item').at(-1);
+  assert.equal(typeof handler, 'function');
+  const tiara = api.core.ItemIdentifiers.A_SPECIAL_TIARA;
+  const requirement = { key: 'quest_lunardiplomacyafteraskingmeteoraaboutherheadgear', mode: 'RequiresDuring' };
+  const allowed = (state, hold = {}) => {
+    const fixture = lunarPlayer(api, {
+      stage: state,
+      items: hold,
+      attributes: { 'quest.lunar_diplomacy.meteora-intro': true },
+    });
+    const event = { player: fixture.player, itemId: tiara, requirement, allowed: undefined };
+    handler(event);
+    return event.allowed;
+  };
+  assert.equal(allowed(125), false, 'the clue has not been heard yet');
+  assert.equal(allowed(150), true, 'Meteora has explained the tiara');
+  assert.equal(allowed(150, { [tiara]: 1 }), false, 'the player is already holding it');
+  assert.equal(allowed(150, { [api.core.ItemIdentifiers.LUNAR_AMULET]: 1 }), false, 'the amulet is already earned');
+  assert.equal(allowed(190), false, 'the quest is over');
+});
+
+test('the brazier ceremony rejects an unlit brazier or missing lunar gear without consuming kindling', () => {
+  const { api, handlers } = mockApi();
+  api.spawnNpc = () => ({});
+  api.removeNpc = () => {};
+  loadLunarPlugin(api);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  const soaked = api.core.ItemIdentifiers.SOAKED_KINDLING;
+  const lunarSlots = [
+    [api.core.Equipment.HEAD_SLOT, api.core.ItemIdentifiers.LUNAR_HELM],
+    [api.core.Equipment.CAPE_SLOT, api.core.ItemIdentifiers.LUNAR_CAPE],
+    [api.core.Equipment.AMULET_SLOT, api.core.ItemIdentifiers.LUNAR_AMULET],
+    [api.core.Equipment.WEAPON_SLOT, api.core.ItemIdentifiers.LUNAR_STAFF],
+    [api.core.Equipment.BODY_SLOT, api.core.ItemIdentifiers.LUNAR_TORSO],
+    [api.core.Equipment.LEG_SLOT, api.core.ItemIdentifiers.LUNAR_LEGS],
+    [api.core.Equipment.HANDS_SLOT, api.core.ItemIdentifiers.LUNAR_GLOVES],
+    [api.core.Equipment.FEET_SLOT, api.core.ItemIdentifiers.LUNAR_BOOTS],
+    [api.core.Equipment.RING_SLOT, api.core.ItemIdentifiers.LUNAR_RING],
+  ];
+
+  const unlit = lunarPlayer(api, { stage: 155, items: { [soaked]: 1 } });
+  action({ player: unlit.player, stepId: 'coPu8b' });
+  assert.equal(unlit.attrs.get('quest.lunar_diplomacy.stage'), 155);
+  assert.equal(unlit.inventory.get(soaked), 1);
+
+  const undressed = lunarPlayer(api, {
+    stage: 155,
+    items: { [soaked]: 1 },
+    attributes: { 'quest.lunar_diplomacy.brazier-lit': true },
+  });
+  action({ player: undressed.player, stepId: 'coPu8b' });
+  assert.equal(undressed.attrs.get('quest.lunar_diplomacy.stage'), 155);
+  assert.equal(undressed.inventory.get(soaked), 1);
+
+  const ready = lunarPlayer(api, {
+    stage: 155,
+    items: { [soaked]: 1 },
+    attributes: { 'quest.lunar_diplomacy.brazier-lit': true },
+  });
+  for (const [slot, itemId] of lunarSlots) ready.equipment.set(slot, itemId);
+  action({ player: ready.player, stepId: 'coPu8b' });
+  assert.equal(ready.attrs.get('quest.lunar_diplomacy.stage'), 160);
+  assert.equal(ready.inventory.get(soaked) ?? 0, 0, 'the soaked kindling is consumed on entry');
+});
+
+test('Lunar clothing hand-ins validate their stage and replacement pieces are recoverable', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const condition = handlers.custom.get('npc-dialogue:condition').at(-1);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  const line = handlers.custom.get('npc-dialogue:line').at(-1);
+  const helm = api.core.ItemIdentifiers.LUNAR_HELM;
+  const vial = api.core.ItemIdentifiers.WAKING_SLEEP_VIAL;
+  const givenKey = 'quest.lunar_diplomacy.oneiro-given';
+
+  const early = lunarPlayer(api, { stage: 140, items: { [helm]: 1 } });
+  condition({ player: early.player, stepId: 'Xkld-c' });
+  assert.equal(early.inventory.get(helm), 1, 'a wrong stage never consumes the helm');
+  assert.equal(early.attrs.get(givenKey), undefined);
+
+  const handIn = lunarPlayer(api, { stage: 150, items: { [helm]: 1 } });
+  condition({ player: handIn.player, stepId: 'Xkld-c' });
+  assert.equal(handIn.inventory.get(helm), 0, 'the helm is consumed only at the hand-in stage');
+  assert.equal(handIn.attrs.get(givenKey).helm, true);
+  action({ player: handIn.player, stepId: 'rSaPSD' });
+  assert.equal(handIn.inventory.get(helm) ?? 0, 0, 'replacement waits for the ceremony stage');
+  handIn.attrs.set('quest.lunar_diplomacy.stage', 155);
+  action({ player: handIn.player, stepId: 'rSaPSD' });
+  assert.equal(handIn.inventory.get(helm), 1, 'a lost given piece is recoverable');
+  action({ player: handIn.player, stepId: 'rSaPSD' });
+  assert.equal(handIn.inventory.get(helm), 1, 'the recovery does not duplicate');
+
+  const noVial = lunarPlayer(api, { stage: 130 });
+  line({
+    player: noVial.player,
+    npcId: api.core.NpcIdentifiers.ONEIROMANCER,
+    text: "Well done, I'll take that for safe keeping.",
+  });
+  assert.equal(noVial.attrs.get('quest.lunar_diplomacy.stage'), 130, 'a missing potion is rejected');
+
+  const withVial = lunarPlayer(api, { stage: 130, items: { [vial]: 1 } });
+  line({
+    player: withVial.player,
+    npcId: api.core.NpcIdentifiers.ONEIROMANCER,
+    text: "Well done, I'll take that for safe keeping.",
+  });
+  assert.equal(withVial.attrs.get('quest.lunar_diplomacy.stage'), 140);
+  assert.equal(withVial.inventory.get(vial), 0, 'the waking sleep vial is consumed on hand-in');
+});
+
+test('Lunar sailing needs the Seal of Passage and the right stage', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  const stageKey = 'quest.lunar_diplomacy.stage';
+  const lokar = api.core.NpcIdentifiers.LOKAR_SEARUNNER;
+  const brundt = api.core.NpcIdentifiers.BRUNDT_THE_CHIEFTAIN;
+  const seal = api.core.ItemIdentifiers.SEAL_OF_PASSAGE;
+  const sail = { npcId: lokar, option: "Arrr! Yar! Let's be on our way, yar!" };
+
+  const early = lunarPlayer(api, { stage: 0, items: { [seal]: 1 } });
+  choice({ player: early.player, ...sail });
+  assert.equal(early.attrs.get(stageKey), 0, 'sailing cannot start before Brundt sends the player');
+
+  const noSeal = lunarPlayer(api, { stage: 20 });
+  choice({ player: noSeal.player, ...sail });
+  assert.equal(noSeal.attrs.get(stageKey), 20);
+  assert.ok(noSeal.messages.includes('Lokar will not sail without a Seal of Passage. Ask Brundt for a replacement.'));
+
+  const ready = lunarPlayer(api, { stage: 20, items: { [seal]: 1 } });
+  choice({ player: ready.player, ...sail });
+  assert.equal(ready.attrs.get(stageKey), 30, 'the seal permits the crossing');
+
+  const wrongBrundt = lunarPlayer(api, { stage: 0 });
+  action({ player: wrongBrundt.player, npcId: brundt, stepId: 'jJ33Bh' });
+  assert.equal(wrongBrundt.attrs.get(stageKey), 0, 'Brundt cannot grant a seal out of order');
+  assert.equal(wrongBrundt.inventory.get(seal) ?? 0, 0);
+});
+
+test('Birds-Eye Jack advances stage 40 to 45 so Bentley can blame the navigator', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const variant = handlers.variant.at(-1);
+  const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
+  const playerFixture = lunarPlayer(api, { stage: 40 });
+  const selected = variant({
+    player: playerFixture.player,
+    npcId: api.core.NpcIdentifiers.BIRDS_EYE_JACK_2,
+    pages: [{ page: 'Lunar Diplomacy' }],
+  });
+  assert.equal(
+    selected,
+    'pirates-cove-talking-to-birds-eye-jack-at-the-captain-s-suggestion',
+    'the real Jack variant is selected after the circular voyage'
+  );
+  assert.equal(playerFixture.attrs.get('quest.lunar_diplomacy.stage'), 45);
+
+  choice({
+    player: playerFixture.player,
+    npcId: api.core.NpcIdentifiers.CAPTAIN_BENTLEY,
+    option: "Perhaps it's the Navigator's fault?",
+  });
+  assert.equal(
+    playerFixture.attrs.get('quest.lunar_diplomacy.stage'),
+    50,
+    'Bentley accepts the navigator accusation at stage 45'
+  );
+});
+
+test('Captain Bentley returns to Lunar Isle at stages 125 and 190', () => {
+  const { api, handlers } = mockApi();
+  loadLunarPlugin(api);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  const seal = api.core.ItemIdentifiers.SEAL_OF_PASSAGE;
+  const npc = { getLocation: () => ({ x: 2222, y: 3796, z: 2 }) };
+  for (const stage of [125, 190]) {
+    const fixture = lunarPlayer(api, { stage, items: { [seal]: 1 } });
+    action({
+      player: fixture.player,
+      npc,
+      npcId: api.core.NpcIdentifiers.CAPTAIN_BENTLEY,
+      stepId: 'szE3tO',
+    });
+    assert.ok(fixture.moves.length > 0, `stage ${stage} gets a return ferry`);
+    assert.deepEqual(
+      [fixture.moves.at(-1).getX(), fixture.moves.at(-1).getY(), fixture.moves.at(-1).getZ()],
+      [2118, 3894, 0],
+      `stage ${stage} lands at the Lunar Isle docks`
+    );
+  }
+});
+
+test('relogging during the final fight restores the owned Me actor', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.getWorld = () => ({ getNpcs: () => [] });
+  api.spawnNpc = (spec) => {
+    const npc = { ...spec, getOwner: () => spec.owner, getId: () => spec.id };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = () => {};
+  loadLunarPlugin(api);
+  const login = handlers.playerLogin.at(-1);
+  const fixture = lunarPlayer(api, {
+    stage: 165,
+    attributes: {
+      'quest.lunar_diplomacy.challenges': {
+        tree: { done: true, reported: true },
+        race: { done: true, reported: true },
+        number: { done: true, reported: true },
+        emote: { done: true, reported: true },
+        dice: { done: true, reported: true },
+        memory: { done: true, reported: true },
+      },
+    },
+  });
+  fixture.player.getLocation = () => new api.core.Location(1761, 5090, 2);
+  login({ player: fixture.player });
+  assert.ok(
+    spawned.some((npc) => npc.id === api.core.NpcIdentifiers.ME && npc.owner === fixture.player),
+    'login reconciliation spawns the saved fight actor'
+  );
+  assert.equal(fixture.attrs.get('quest.lunar_diplomacy.stage'), 165);
+});
+
+test('the readiness choice does not restart an already saved final fight', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = (spec) => { spawned.push(spec); return spec; };
+  api.removeNpc = () => {};
+  loadLunarPlugin(api);
+  const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
+  const fixture = lunarPlayer(api, {
+    stage: 165,
+    attributes: {
+      'quest.lunar_diplomacy.challenges': {
+        tree: { done: true, reported: true },
+        race: { done: true, reported: true },
+        number: { done: true, reported: true },
+        emote: { done: true, reported: true },
+        dice: { done: true, reported: true },
+        memory: { done: true, reported: true },
+      },
+    },
+  });
+  fixture.player.getLocation = () => new api.core.Location(1761, 5090, 2);
+  choice({
+    player: fixture.player,
+    npcId: api.core.NpcIdentifiers.ETHEREAL_BEING,
+    option: "Of course. I'm ready.",
+  });
+  assert.equal(fixture.attrs.get('quest.lunar_diplomacy.stage'), 165);
+  assert.equal(
+    spawned.filter((spec) => spec.id === api.core.NpcIdentifiers.ME && spec.owner === fixture.player).length,
+    0,
+    'the readiness dialogue is not a second fight trigger'
+  );
+});
 
 test('Fremennik Exiles yields Longhall Brundt to Lunar Seal recovery before its start menu', () => {
   const { api: base } = mockApi();
@@ -22000,6 +22371,9 @@ test('In Search of Knowledge feeds Aimeri, fills the tomes and completes through
   const items = new Map();
   const varbits = new Map();
   const messages = [];
+  const animations = [];
+  const headbars = [];
+  let experience = 0;
   const sender = new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
     get: (target, key) => key in target ? target[key] : key === 'getVarbit' ? () => 0 : () => sender,
   });
@@ -22034,9 +22408,16 @@ test('In Search of Knowledge feeds Aimeri, fills the tomes and completes through
     getInventory: () => inventory,
     getPacketSender: () => sender,
     getDialogueManager: () => ({ startDialogues: () => {} }),
-    getSkillManager: () => ({ getExperience: () => 0, addExperience: () => {} }),
+    getSkillManager: () => ({
+      getExperience: () => experience,
+      addExperience: (_skill, amount) => { experience += amount; },
+    }),
     sendMessage: (message) => messages.push(message),
     isRegistered: () => false,
+  };
+  const target = {
+    performAnimation: (animation) => animations.push(animation?.getId?.() ?? animation?.id),
+    showHeadbar: (id, options) => headbars.push([id, options.fill]),
   };
 
   // Purple sweets are edible, but not the fish/meat/vegetables Aimeri accepts.
@@ -22051,12 +22432,17 @@ test('In Search of Knowledge feeds Aimeri, fills the tomes and completes through
 
   for (let fed = 1; fed <= 5; fed++) {
     items.set(ids.COOKED_MEAT, 1);
-    const event = { player, npcId: npcs.BROTHER_AIMERI, itemId: ids.COOKED_MEAT, slot: -1, handled: false };
+    const event = {
+      player, target, npcId: npcs.BROTHER_AIMERI, itemId: ids.COOKED_MEAT, slot: -1, handled: false,
+    };
     handlers.itemOnNpc[0](event);
     assert.equal(event.handled, true);
     assert.equal(attributes.get('in-search-of-knowledge:aimeri-fed'), fed);
     assert.equal(varbits.get(8393), fed);
+    assert.equal(animations.at(-1), 829, 'Aimeri plays human_eat');
+    assert.deepEqual(headbars.at(-1), [0, fed * 6], 'the 30-wide headbar gains 6 per feed');
   }
+  assert.equal(headbars.at(-1)[1], 30);
 
   handlers.custom.get('npc-dialogue:line')[0]({
     player, npcId: npcs.BROTHER_AIMERI_2, text: "I'll keep my eyes open.",
@@ -22083,21 +22469,74 @@ test('In Search of Knowledge feeds Aimeri, fills the tomes and completes through
   assert.equal(varbits.get(8399), 1);
   assert.equal(items.get(ids.TATTERED_SUN_PAGE), undefined);
 
+  const check = { player, itemId: ids.TOME_OF_THE_SUN, handled: false };
+  handlers.namedItemActions.get('Tome of the Sun').Check(check);
+  assert.equal(messages.at(-1), 'There are 3 pages missing.');
+
   attributes.set('in-search-of-knowledge:pages', { sun: 4, moon: 4, temple: 4 });
+  handlers.namedItemActions.get('Tome of the Sun').Check(check);
+  assert.equal(messages.at(-1), 'There are 0 pages missing. Perhaps Logosia would be interested in this?');
   items.set(ids.TOME_OF_THE_SUN, 1);
   items.set(ids.TOME_OF_THE_MOON, 1);
   items.set(ids.TOME_OF_THE_TEMPLE, 1);
   const handIn = { player, npcId: npcs.LOGOSIA, itemId: ids.TOME_OF_THE_SUN, slot: -1, handled: false };
   handlers.itemOnNpc[1](handIn);
   assert.equal(handIn.handled, true);
+  const action = (stepId) => {
+    const event = { player, npcId: npcs.LOGOSIA, stepId, kind: 'message', text: '', handled: false };
+    handlers.custom.get('npc-dialogue:action')[0](event);
+    return event;
+  };
+  const condition = (stepId, text) => handlers.condition.at(-1)({ player, npcId: npcs.LOGOSIA, stepId, text });
+
+  const show = action('5vCu67');
+  assert.deepEqual(show.box.items, [ids.TOME_OF_THE_SUN], 'the used tome is shown in its objectbox');
+  assert.equal(items.get(ids.TOME_OF_THE_SUN), 1, 'the tome leaves only after the box is continued');
+  assert.equal(condition('PtKwvk', 'If the player has not handed in all three tomes:'), true);
+  assert.equal(items.get(ids.TOME_OF_THE_SUN), undefined);
+
+  const two = action('6L2i6E');
+  assert.deepEqual(two.box.items, [ids.TOME_OF_THE_MOON, ids.TOME_OF_THE_TEMPLE]);
+  const again = {
+    player, npcId: npcs.LOGOSIA, text: 'Again, your donation to the library is appreciated', skip: false,
+  };
+  handlers.custom.get('npc-dialogue:line')[0](again);
+  assert.equal(again.skip, true, 'the extra transcript line is skipped');
+  assert.equal(attributes.get('quest.in_search_of_knowledge.stage'), 2);
+  assert.deepEqual(attributes.get('in-search-of-knowledge:tomes-returned'), { sun: 1, moon: 1, temple: 1 });
+  assert.equal(condition('phoFZJ', 'If the player has not handed in all three tomes.'), false);
+  assert.equal(condition('jgDFoB', 'If the player has handed in all three tomes.'), true);
+
+  const lamp = action('z_El-S');
+  assert.deepEqual(lamp.box.items, [ids.LAMP_OF_KNOWLEDGE]);
   assert.equal(attributes.get('quest.in_search_of_knowledge.stage'), 3);
   assert.equal(items.get(ids.LAMP_OF_KNOWLEDGE), 1);
-  assert.deepEqual(attributes.get('in-search-of-knowledge:tomes-returned'), { sun: 1, moon: 1, temple: 1 });
 
   attributes.set('in-search-of-knowledge:page-prevention', 1);
   const drops = { player, drops: [{ itemId: ids.TATTERED_SUN_PAGE }, { itemId: ids.COINS }] };
   handlers.custom.get('npc-drops:roll')[0](drops);
   assert.deepEqual(drops.drops.map((drop) => drop.itemId), [ids.COINS]);
+
+  // Forthos keeps one page, converted to the kind the player has fewest of.
+  attributes.set('in-search-of-knowledge:page-prevention', 0);
+  attributes.set('in-search-of-knowledge:pages', { sun: 4, moon: 1, temple: 3 });
+  const at = (x, y) => ({ getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }) });
+  const inside = {
+    player, npc: at(1800, 9900),
+    drops: [
+      { itemId: ids.TATTERED_SUN_PAGE, amount: 1 },
+      { itemId: ids.TATTERED_TEMPLE_PAGE, amount: 1 },
+      { itemId: ids.COINS, amount: 100 },
+    ],
+  };
+  handlers.custom.get('npc-drops:roll')[0](inside);
+  assert.deepEqual(inside.drops.map((drop) => drop.itemId), [ids.TATTERED_MOON_PAGE, ids.COINS]);
+  const outside = {
+    player, npc: at(3000, 3500),
+    drops: [{ itemId: ids.TATTERED_SUN_PAGE, amount: 1 }, { itemId: ids.COINS, amount: 100 }],
+  };
+  handlers.custom.get('npc-drops:roll')[0](outside);
+  assert.deepEqual(outside.drops.map((drop) => drop.itemId), [ids.COINS]);
 
   // A full coin stack cannot pay for pages: keep the pages instead of clamping the payout.
   items.set(ids.COINS, 2147483647);
@@ -22122,6 +22561,11 @@ test('In Search of Knowledge feeds Aimeri, fills the tomes and completes through
   handlers.namedItemActions.get('Lamp of knowledge').Rub(rub);
   assert.equal(rub.handled, true);
   assert.equal(rewardRequest.minLevel, 40);
+  assert.equal(
+    rewardRequest.onConfirm(api.core.Skill.CONSTRUCTION, 'Construction'),
+    '<col=0000ff>Your wish has been granted!</col> You have been awarded 10,000 Construction experience!',
+  );
+  assert.equal(experience, 10000);
 
   handlers.custom.get('npc-dialogue:action')[0]({ player, npcId: npcs.LOGOSIA, stepId: 'WQyrhA' });
   assert.equal(attributes.get('in-search-of-knowledge:page-prevention'), 1);
@@ -22200,4 +22644,57 @@ test('Desert Treasure II gives Kasonde\'s serum when the bag has a free slot (tr
   free = 0;
   assert.equal(ask('szffOl'), true, 'a full bag gets the "no room" branch');
   assert.equal(ask('other'), undefined, 'other conditions are left to their owners');
+});
+
+test('In Search of Knowledge resumes the reward after the final tome is handed in', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/InSearchOfKnowledge.Quest')(api);
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const ids = api.core.ItemIdentifiers;
+  const npcs = api.core.NpcIdentifiers;
+  const attributes = new Map();
+  const items = new Map();
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    getItems: () => [...items.entries()].map(([id, amount]) => ({ id, getId: () => id, getAmount: () => amount })),
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: () => false,
+    getFreeSlots: () => 28,
+    isFull: () => false,
+    forceAdd: (_player, item) => inventory.adds(item.getId(), 1),
+  };
+  const sender = new Proxy({ getVarbit: () => 0, getVarp: () => 0 }, {
+    get: (target, key) => key in target ? target[key] : () => sender,
+  });
+  let manager;
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => sender,
+    getDialogueManager: () => manager,
+    getUsername: () => 'ISKResume',
+    isPlayerBot: () => false,
+    sendMessage: () => {},
+    isRegistered: () => false,
+  };
+  manager = new DialogueManager(player);
+  attributes.set('quest.in_search_of_knowledge.stage', 2);
+  attributes.set('in-search-of-knowledge:tomes-returned', { sun: 1, moon: 1, temple: 1 });
+
+  const talk = handlers.npcInteractions.get('Logosia')['Talk-to'];
+  assert.equal(talk({ player, npc: null, npcId: npcs.LOGOSIA, definition: { getName: () => 'Logosia' } }), true);
+  const lines = [];
+  for (let i = 0; i < 30 && manager.getCurrent(); i++) {
+    const current = manager.getCurrent();
+    if (typeof current.getText === 'function') lines.push(current.getText());
+    manager.advance();
+  }
+  assert.ok(lines.some((line) => /^Your contributions to the library/.test(line)));
+  assert.ok(lines.includes('You receive an experience lamp as a reward.'));
+  assert.ok(lines.some((line) => line.startsWith('If you find any spare pages')));
+  assert.ok(lines.includes("I'll keep an eye out."));
+  assert.ok(lines.includes('Enough talk now, Shhhh!'));
+  assert.equal(attributes.get('quest.in_search_of_knowledge.stage'), 3);
+  assert.equal(items.get(ids.LAMP_OF_KNOWLEDGE), 1);
 });
