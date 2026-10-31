@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import { GameConstants } from "../game/GameConstants";
 import { World } from "../game/World";
 import { Player } from "../game/entity/impl/player/Player";
+import { PlayerSave } from "../game/entity/impl/player/persistence/PlayerSave";
 import { Appearance } from "../game/model/Appearance";
 import { Flag } from "../game/model/Flag";
 import { Location } from "../game/model/Location";
@@ -1213,6 +1214,7 @@ export class ClientConnection {
     // saved from a desktop session; resolveGameframeRoot reads it at boot.
     if (clientType === 1) player.setAttribute(MOBILE_CLIENT_ATTRIBUTE, true);
     if (pending.save) pending.save.applyToPlayer(player);
+    else PlayerSave.applyAttributeDefaults(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);
     if (pending.loginTokens) player.setAttribute(LOGIN_TOKENS_ATTRIBUTE, pending.loginTokens);
