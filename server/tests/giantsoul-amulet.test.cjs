@@ -22,11 +22,12 @@ function fakePlayer(carried = {}) {
     messages,
     sendMessage: (message) => messages.push(message),
     getInventory: () => ({
+      getItems: () => player.amulet ? [player.amulet] : [],
       getAmount: (id) => items.get(id) ?? 0,
       deleteNumber: (id, amount) => items.set(id, (items.get(id) ?? 0) - amount),
       refreshItems() {},
     }),
-    getEquipment: () => ({ refreshItems() {} }),
+    getEquipment: () => ({ getItems: () => [], refreshItems() {} }),
     setEnteredAmountAction: (action) => { player.amountAction = action; },
     getPacketSender: () => ({ sendEnterAmountPrompt: (title) => { player.amountPrompt = title; }, sendInterfaceRemoval() {} }),
     carried: (id) => items.get(id) ?? 0,
@@ -40,6 +41,7 @@ const amulet = (charges) => {
   return item;
 };
 const use = (player, item, otherId) => {
+  player.amulet = item;
   const event = { player, usedItem: new Item(otherId, 1), usedItemId: otherId, usedWithItem: item, usedWithItemId: item.getId(), handled: false };
   Giantsoul._test.chargeWithItems(event);
   return event.handled;
@@ -78,7 +80,7 @@ test('charging without both items says what it needs', () => {
 test("Rub offers the three lairs and Nowhere; worn options go straight there", (t) => {
   const arrivals = [];
   t.mock.method(core.TeleportHandler, 'checkReqs', () => true);
-  t.mock.method(core.TeleportHandler, 'teleport', (player, target, type, warn, onArrival) => { arrivals.push([target.getX(), target.getY()]); onArrival(); });
+  t.mock.method(core.TeleportHandler, 'teleport', (player, target, type, warn, onArrival) => { arrivals.push([target.getX(), target.getY()]); onArrival?.(); });
   const player = fakePlayer();
   const item = amulet(2);
   const event = (option) => ({ player, item, itemId: item.getId(), option, handled: false });
@@ -119,4 +121,56 @@ test('the amulet is kept beyond the kept items on a death in the titans fight (W
   assert.equal(keep(fighter, I.SHARK), null);
   assert.equal(keep(outside, I.GIANTSOUL_AMULET), null);
   Area.sessions.delete('test');
+});
+
+test('equipping during the real teleport animation cannot retain the spent charge', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { EquipPacketListener } = require('../dist/net/packet/impl/EquipPacketListener');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  await CachePipeline.initialize();
+  require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+  for (const initial of [2, 1]) {
+    const player = new Player({ sendClientPacket() {} });
+    player.setUsername('giantsoul-test');
+    const item = amulet(initial);
+    player.getInventory().setItem(0, item);
+    Giantsoul._test.teleport(player, item, Giantsoul._test.LAIRS[1]);
+    assert.equal(player.isTeleportingReturn(), true);
+    // NetworkBuilder routes inventory Wear here even during a teleport.
+    EquipPacketListener.equip(player, item.getId(), 0, 3214);
+    const worn = player.getEquipment().getItems()[core.Equipment.AMULET_SLOT];
+    assert.notEqual(worn, item, 'equipping clones the inventory item');
+    for (let tick = 0; tick < 7; tick++) TaskManager.process();
+    assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [3095, 9833]);
+    assert.equal(Giantsoul._test.charges(worn), initial - 1);
+    assert.equal(worn.getId(), initial === 1 ? I.GIANTSOUL_AMULET_UNCHARGED_ : I.GIANTSOUL_AMULET);
+  }
+});
+
+test('a refused teleport keeps the amulet charge', (t) => {
+  t.mock.method(core.TeleportHandler, 'checkReqs', () => false);
+  t.mock.method(core.TeleportHandler, 'teleport', () => assert.fail('refused teleport must not start'));
+  const item = amulet(1);
+  Giantsoul._test.teleport(fakePlayer(), item, Giantsoul._test.LAIRS[0]);
+  assert.equal(Giantsoul._test.charges(item), 1);
+});
+
+
+test('equipping after opening the charge prompt cancels spending on the detached item', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { EquipPacketListener } = require('../dist/net/packet/impl/EquipPacketListener');
+  const player = new Player({ sendClientPacket() {} });
+  const item = amulet(0);
+  player.getInventory().setItem(0, item);
+  player.getInventory().setItem(1, new Item(I.BIG_BONES_2, 5));
+  player.getInventory().setItem(2, new Item(I.LAW_RUNE, 5));
+  Giantsoul._test.charge(player, item);
+  EquipPacketListener.equip(player, item.getId(), 0, 3214);
+  const worn = player.getEquipment().getItems()[core.Equipment.AMULET_SLOT];
+  assert.notEqual(worn, item);
+  player.getEnteredAmountAction().execute(3);
+  assert.equal(Giantsoul._test.charges(worn), 0);
+  assert.equal(player.getInventory().getAmount(I.LAW_RUNE), 5);
+  assert.equal(player.getInventory().getAmount(I.BIG_BONES_2), 5);
 });

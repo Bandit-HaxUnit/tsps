@@ -92,7 +92,11 @@ function charge(player, amulet) {
     addCharges(player, amulet, 1);
     return;
   }
-  player.setEnteredAmountAction({ execute: (amount) => addCharges(player, amulet, amount) });
+  player.setEnteredAmountAction({ execute: (amount) => {
+    // A moved or equipped item may have been cloned since the prompt opened.
+    if (!player.getInventory().getItems().includes(amulet) && !player.getEquipment().getItems().includes(amulet)) return;
+    addCharges(player, amulet, amount);
+  } });
   player.getPacketSender().sendEnterAmountPrompt(`How many charges would you like to add? (0 - ${most.toLocaleString("en-US")})`);
 }
 
@@ -123,7 +127,9 @@ function teleport(player, amulet, lair) {
   const { Location, TeleportHandler, TeleportType } = core;
   const target = new Location(...lair.tile);
   if (!TeleportHandler.checkReqs(player, target, WILDERNESS_LEVEL)) return;
-  TeleportHandler.teleport(player, target, TeleportType.NORMAL, false, () => useCharge(player, amulet));
+  // Equipping during the animation clones the item, so pay before it can move.
+  useCharge(player, amulet);
+  TeleportHandler.teleport(player, target, TeleportType.NORMAL, false);
 }
 
 function useCharge(player, amulet) {
