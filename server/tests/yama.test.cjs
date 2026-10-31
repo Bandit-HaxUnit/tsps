@@ -217,7 +217,7 @@ test("opening a Forgotten lockbox consumes it and gives its reward", () => {
     getInventory: () => ({
       contains: (id) => (inventory.get(id) ?? 0) > 0,
       delete: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) - amount),
-      adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      forceAdd: (_player, item) => inventory.set(item.id, (inventory.get(item.id) ?? 0) + item.amount),
       refreshItems() {},
     }),
     sendMessage(text) { this.message = text; },

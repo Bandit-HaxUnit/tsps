@@ -167,7 +167,7 @@ An instance scene is drawn from its REBUILD_REGION centre chunk less 6, not from
 
 ## Testing
 
-`node --test tests/yama.test.cjs`
+`node --test tests/yama.test.cjs tests/yama-lockbox-overflow.test.cjs`
 
 Developer commands: `::yamahp <hitpoints>` (1666 or 833 reach a phase change at his next attack), `::yamakill` (a hit of his remaining hitpoints from the player, in phase 3), `::yamajudgehp <hitpoints>`, `::yamajudgekill`.
 

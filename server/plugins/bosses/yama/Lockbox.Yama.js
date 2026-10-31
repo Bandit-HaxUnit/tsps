@@ -25,8 +25,8 @@ function openLockbox({ player, itemId }) {
   if (!inventory.contains(Common.data.lockbox.item)) return true;
   inventory.delete(Common.data.lockbox.item, 1);
   const reward = rollLockbox();
-  inventory.adds(reward.itemId, reward.amount);
-  inventory.refreshItems();
+  // forceAdd keeps the whole reward: a stack at MAX_STACK_AMOUNT drops the overflow.
+  inventory.forceAdd(player, new Common.core.Item(reward.itemId, reward.amount));
   player.sendMessage(reward.message);
   return true;
 }
