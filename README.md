@@ -24,6 +24,22 @@ If setup is interrupted, run `npm run setup` again.
 
 Running several branches at once, one worktree each on its own ports: see [docs/worktrees.md](docs/worktrees.md).
 
+### Optional: the in-game Quest Helper
+
+The client's Quest Helper panel is driven by the upstream
+[Quest Helper](https://github.com/Zoinkwiz/quest-helper) Java code, compiled by
+[`tools/quest-helper-bridge`](tools/quest-helper-bridge/README.md) and run locally. It needs
+**Java 21** and a one-time build: follow that README to clone the pinned source and run
+`./gradlew test installDist`. Then, in a second terminal, with `QUEST_HELPER_TOKEN` set to any
+24+ characters in `.env`:
+
+```bash
+yarn bridge
+```
+
+Without it the panel reports that the engine has not been started. Tutorial Island and Recipe for
+Disaster still work, because the server answers those itself.
+
 ## Publish your world
 
 Create a server token at [RSPS.app](https://rsps.app/) under **Settings → Server tokens**, then add it to `.env` in the repository root:
@@ -40,7 +56,7 @@ Run `yarn start`. Your world appears in the World list once it registers. Keep t
 
 ## Links
 
-- [Discord](https://discord.gg/aKsyakSppk) — questions, help and development chat
+- [Discord](https://discord.com/invite/TCTDGVzejn) — questions, help and development chat
 - [Progress](https://rsps.app/progress) — how much of OSRS is implemented, by category
 - [Host a world](https://rsps.app/host)
 
