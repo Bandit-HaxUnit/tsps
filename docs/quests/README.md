@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 30 · ⚠️ passed with issues: 22 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 7 · untested: 120
+186 quests · ✅ passed: 31 · ⚠️ passed with issues: 22 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 7 · untested: 120
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -138,6 +138,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Shield of Arrav](shield-of-arrav/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
 | Shilo Village | untested |  |  |  |  |
 | [Sins of the Father](sins-of-the-father/README.md) | untested |  |  |  |  |
+| [Skippy and the Mogres](skippy-and-the-mogres/README.md) | ✅ passed | 2026-10-31 | agent | deepseek-v4.1-flash | 1 |
 | [Sleeping Giants](sleeping-giants/README.md) | ✅ passed |  | agent |  |  |
 | [Song of the Elves](song-of-the-elves/README.md) | untested |  |  |  |  |
 | [Spirits of the Elid](spirits-of-the-elid/README.md) | untested |  |  |  |  |
