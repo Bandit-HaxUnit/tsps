@@ -14,7 +14,7 @@ the welcome screen laid out as live, and volume sliders saved as live does (both
 recordings of live).
 
 Open:
-- Insert-mode bank drags, and two players on one boat, are untested.
+- Two players on one boat isn't implemented yet.
 
 ## Decisions
 
