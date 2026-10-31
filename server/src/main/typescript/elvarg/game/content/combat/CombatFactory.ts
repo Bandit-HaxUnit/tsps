@@ -1052,7 +1052,18 @@ export class CombatFactory {
             if ((definition.isPoisonous() || venomous) && Misc.getRandom(10) <= 5) {
                 // Venom stores its starting damage rather than a severity, and
                 // escalates from there - see CombatPoisonData.getMeleeSeverity.
-                CombatFactory.poisonEntity(target, venomous ? 6 : 30, venomous ? 2 : 1);
+                const poison = {
+                    attacker,
+                    target,
+                    // Severity, not the first hit: see CombatPoisonEffect.damageFromSeverity.
+                    severity: venomous ? 6 : 30,
+                    venomous,
+                    handled: false,
+                };
+                PluginManager.emitCustomEvent("combat:npc-poison", poison);
+                if (!poison.handled && poison.severity > 0) {
+                    CombatFactory.poisonEntity(target, poison.severity, poison.venomous ? 2 : 1);
+                }
             }
         }
 
