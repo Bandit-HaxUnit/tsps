@@ -63,47 +63,39 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         let unsupported = 0;
         let vetoed = 0;
 
-        // Merge sources in priority order. A later source can remove a spawn or
-        // replace it at the same tile (the editor's wander-radius changes and
-        // moved spawns arrive this way).
-        const removals = new Set<string>();
+        // Merge sources in priority order, applying their records in file order.
+        // A later source can replace a spawn at the same tile (wander/facing),
+        // and a remove marker drops the spawns recorded before it. An addition
+        // after that marker survives, which is how a spawn moved onto its own
+        // original tile still loads.
         const merged: Array<{ raw: RawNpcSpawnDefinition; source: string } | undefined> = [];
-        const indexByKey = new Map<string, number>();
+        const indicesByKey = new Map<string, number[]>();
         for (const source of loaded.sources) {
             totalCandidates += source.definitions.length;
             for (const raw of source.definitions) {
-                if (raw && typeof raw === "object" && raw.remove === true) {
-                    const key = NpcSpawnDefinitionLoader.spawnKey(raw);
-                    if (key) removals.add(key);
-                    continue;
-                }
                 const key = raw && typeof raw === "object"
                     ? NpcSpawnDefinitionLoader.spawnKey(raw)
                     : undefined;
-                const previous = key === undefined ? undefined : indexByKey.get(key);
-                const previousEntry = previous === undefined ? undefined : merged[previous];
-                if (key !== undefined && previous !== undefined && previousEntry && previousEntry.source !== source.name) {
-                    merged[previous] = { raw, source: source.name };
-                    // Earlier sources may hold the same spawn more than once; the
-                    // override replaces all of them.
-                    for (let index = 0; index < merged.length; index++) {
-                        if (index === previous) continue;
-                        const other = merged[index];
-                        if (!other || other.source === source.name) continue;
-                        if (NpcSpawnDefinitionLoader.spawnKey(other.raw) === key) merged[index] = undefined;
-                    }
+                if (raw && typeof raw === "object" && raw.remove === true) {
+                    if (key === undefined) continue;
+                    for (const index of indicesByKey.get(key) ?? []) merged[index] = undefined;
+                    indicesByKey.delete(key);
                     continue;
                 }
-                if (key !== undefined) indexByKey.set(key, merged.length);
+                if (key !== undefined) {
+                    const survivors: number[] = [];
+                    for (const index of indicesByKey.get(key) ?? []) {
+                        const entry = merged[index];
+                        if (!entry) continue;
+                        // A later source replaces the earlier records; duplicates
+                        // inside one source are all kept.
+                        if (entry.source !== source.name) merged[index] = undefined;
+                        else survivors.push(index);
+                    }
+                    survivors.push(merged.length);
+                    indicesByKey.set(key, survivors);
+                }
                 merged.push({ raw, source: source.name });
-            }
-        }
-        if (removals.size > 0) {
-            for (let index = 0; index < merged.length; index++) {
-                const entry = merged[index];
-                if (!entry) continue;
-                const key = NpcSpawnDefinitionLoader.spawnKey(entry.raw);
-                if (key !== undefined && removals.has(key)) merged[index] = undefined;
             }
         }
 

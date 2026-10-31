@@ -70,6 +70,14 @@ function npcKey(edit: EditModeEdit): string {
     return `${edit.tileX},${edit.tileY},${edit.plane},${edit.locId}`;
 }
 
+/** Stable identity for deduplicating edits imported from a spawn patch. */
+function editKey(edit: EditModeEdit): string {
+    return JSON.stringify([
+        edit.kind, edit.locId, edit.tileX, edit.tileY, edit.plane,
+        edit.shape, edit.rotation, edit.wanderRadius, edit.direction,
+    ]);
+}
+
 function toInt(value: unknown, fallback: number, min: number, max: number): number {
     const numeric = Math.floor(Number(value));
     if (!Number.isFinite(numeric)) return fallback;
@@ -433,6 +441,25 @@ export class EditModePlugin {
 
     loadNpcInteractions() {
         return this.host?.loadNpcInteractions?.() ?? Promise.reject(new Error("NPC interaction data is unavailable"));
+    }
+
+    /** The saved npc-spawns-custom.json patch as editor edits, for a fresh profile. */
+    loadPersistedNpcSpawnEdits(): Promise<EditModeEdit[]> {
+        return this.host?.loadPersistedNpcSpawnEdits?.() ?? Promise.resolve([]);
+    }
+
+    /** Merges imported spawn edits once, replaying them into the preview. */
+    importNpcSpawnEdits(edits: readonly EditModeEdit[]): boolean {
+        const seen = new Set(this.config.edits.map(editKey));
+        const fresh = edits.filter((edit) => {
+            const key = editKey(edit);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        if (fresh.length === 0) return false;
+        this.commitEdits(fresh);
+        return true;
     }
 
     getNpcMenuOptions(npcTypeId: number) {

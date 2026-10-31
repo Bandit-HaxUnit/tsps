@@ -37,10 +37,21 @@ export function npcSpawnKey(spawn: { id: number; tileX: number; tileY: number; p
 }
 
 /**
- * Reads npc-spawns.json. Entries named by an NpcIdentifiers `key` have no
- * numeric id here (the client has no identifiers table), so they are skipped.
+ * One spawn record from npc-spawns.json or its editor patch. Entries named by
+ * an NpcIdentifiers `key` have no numeric id here (the client has no
+ * identifiers table), so they are skipped.
  */
-export function parseNpcSpawns(contents: string): BrowserHostNpcSpawn[] {
+export type NpcSpawnRecord = {
+    id: number;
+    tileX: number;
+    tileY: number;
+    plane: number;
+    direction?: number;
+    wanderRadius?: number;
+    remove?: boolean;
+};
+
+export function parseNpcSpawnRecords(contents: string): NpcSpawnRecord[] {
     if (typeof contents !== "string" || contents.length > 20_000_000) throw new Error("Invalid npc-spawns.json");
     const parsed = JSON.parse(contents);
     const integer = (value: unknown, max: number) =>
@@ -55,8 +66,8 @@ export function parseNpcSpawns(contents: string): BrowserHostNpcSpawn[] {
         || (spawn.wanderRadius !== undefined && !integer(spawn.wanderRadius, 255))
         || (spawn.remove !== undefined && typeof spawn.remove !== "boolean")
     )) throw new Error("Invalid npc-spawns.json");
-    return parsed.flatMap((spawn): BrowserHostNpcSpawn[] => {
-        if (spawn.remove === true || !integer(spawn.id, 0x7fffffff)) return [];
+    return parsed.flatMap((spawn): NpcSpawnRecord[] => {
+        if (!integer(spawn.id, 0x7fffffff)) return [];
         return [{
             id: spawn.id,
             tileX: spawn.x,
@@ -64,6 +75,22 @@ export function parseNpcSpawns(contents: string): BrowserHostNpcSpawn[] {
             plane: spawn.level,
             ...(Number.isInteger(spawn.direction) ? { direction: spawn.direction } : {}),
             ...(Number.isInteger(spawn.wanderRadius) ? { wanderRadius: spawn.wanderRadius } : {}),
+            ...(spawn.remove === true ? { remove: true } : {}),
+        }];
+    });
+}
+
+/** The playable spawns in a file; removal markers are dropped. */
+export function parseNpcSpawns(contents: string): BrowserHostNpcSpawn[] {
+    return parseNpcSpawnRecords(contents).flatMap((record): BrowserHostNpcSpawn[] => {
+        if (record.remove) return [];
+        return [{
+            id: record.id,
+            tileX: record.tileX,
+            tileY: record.tileY,
+            plane: record.plane,
+            ...(record.direction === undefined ? {} : { direction: record.direction }),
+            ...(record.wanderRadius === undefined ? {} : { wanderRadius: record.wanderRadius }),
         }];
     });
 }

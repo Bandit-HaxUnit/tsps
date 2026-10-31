@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { EditModePlugin } from "../game/plugins/editmode/EditModePlugin";
-import { parseNpcSpawns } from "../game/plugins/editmode/hostProtocol/npcSpawnMessage";
+import { parseNpcSpawnRecords, parseNpcSpawns } from "../game/plugins/editmode/hostProtocol/npcSpawnMessage";
 import type { EditModeSelection } from "../game/plugins/editmode/types";
 
 const dom = new JSDOM('<canvas tabindex="0"></canvas><input>', { pretendToBeVisual: true });
@@ -9,8 +9,11 @@ Object.assign(globalThis, {
     window: dom.window,
     document: dom.window.document,
     HTMLElement: dom.window.HTMLElement,
+    HTMLAnchorElement: dom.window.HTMLAnchorElement,
     KeyboardEvent: dom.window.KeyboardEvent,
     self: dom.window,
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window),
 });
 const canvas = document.querySelector("canvas")!;
 
@@ -24,6 +27,13 @@ const canvas = document.querySelector("canvas")!;
         { id: 3, tileX: 3222, tileY: 3218, plane: 0, wanderRadius: 3 },
     ], "spawn entries keep their tile and wander range; keyed and removed entries are skipped");
     assert.throws(() => parseNpcSpawns("[{\"x\":0,\"y\":0,\"level\":9}]"), "invalid planes are rejected");
+    assert.deepEqual(parseNpcSpawnRecords(JSON.stringify([
+        { id: 3, x: 3222, y: 3218, level: 0, remove: true },
+        { id: 3, x: 3222, y: 3218, level: 0, wanderRadius: 0 },
+    ])), [
+        { id: 3, tileX: 3222, tileY: 3218, plane: 0, remove: true },
+        { id: 3, tileX: 3222, tileY: 3218, plane: 0, wanderRadius: 0 },
+    ], "patch records keep removals and their file order");
 }
 
 type Call = [string, ...unknown[]];
@@ -153,6 +163,49 @@ assert.deepEqual(plugin.getConfig().edits, [{
     kind: "npc", locId: 3, tileX: 3230, tileY: 3218, plane: 0, shape: 10, rotation: 0, wanderRadius: 4,
 }]);
 assert.deepEqual(calls, [], "a custom spawn's range is stored on its own edit");
+
+// A saved patch imported into a fresh profile rebuilds removal and spawn edits
+// once, so a later export still contains them.
+plugin.clearEdits();
+calls.length = 0;
+const imported = [
+    { kind: "npcDelete" as const, locId: 3, tileX: 3220, tileY: 3220, plane: 0, shape: 0, rotation: 0 },
+    { kind: "npc" as const, locId: 3, tileX: 3224, tileY: 3220, plane: 0, shape: 10, rotation: 0, wanderRadius: 2 },
+];
+assert.equal(plugin.importNpcSpawnEdits(imported), true, "the first import adds the patch edits");
+assert.deepEqual(plugin.getConfig().edits.map((edit) => edit.kind), ["npcDelete", "npc"]);
+assert.deepEqual(calls, [
+    ["hideNpcSpawn", { id: 3, tileX: 3220, tileY: 3220, plane: 0 }],
+    ["spawnNpc", 3, { tileX: 3224, tileY: 3220, plane: 0 }, 0],
+]);
+calls.length = 0;
+assert.equal(plugin.importNpcSpawnEdits(imported), false, "re-importing the same patch is a no-op");
+assert.deepEqual(calls, []);
+assert.equal(plugin.getConfig().edits.length, 2, "imported edits are retained for export");
+
+// Deleting the last saved custom NPC still writes an empty patch, so the old
+// file can no longer spawn it.
+plugin.clearEdits();
+plugin.importNpcSpawnEdits([{
+    kind: "npc", locId: 3, tileX: 3240, tileY: 3240, plane: 0, shape: 10, rotation: 0,
+}]);
+const { mountEditorUi } = require("../game/plugins/editmode/EditorUi");
+const FileSaver = require("file-saver");
+const savedFiles: Array<{ name: string; size: number }> = [];
+const originalSaveAs = FileSaver.saveAs;
+FileSaver.saveAs = (blob: Blob, name: string) => { savedFiles.push({ name, size: blob.size }); };
+const removeUi = mountEditorUi(plugin);
+plugin.clearEdits();
+const download = [...document.querySelectorAll('[role="toolbar"] button')]
+    .find((button) => button.getAttribute("aria-label") === "Download world and map edits") as HTMLButtonElement;
+assert.ok(download, "standalone editors have the download action");
+download.click();
+FileSaver.saveAs = originalSaveAs;
+removeUi();
+assert.ok(
+    savedFiles.some((file) => file.name === "npc-spawns-custom.json" && file.size === 3),
+    "an emptied spawn list still exports [] instead of reporting nothing to save",
+);
 
 plugin.clearEdits();
 dom.window.close();

@@ -26,11 +26,20 @@ before(async () => {
     { id: MAN, x: 3200, y: 3200, level: 0, wanderRadius: 5 },
     { id: MAN, x: 3210, y: 3210, level: 0 },
     { id: MAN, x: 3220, y: 3220, level: 1 },
+    { id: MAN, x: 3240, y: 3240, level: 0, wanderRadius: 4 },
+    { id: MAN, x: 3250, y: 3250, level: 0 },
   ];
   const patch = [
     { id: MAN, x: 3200, y: 3200, level: 0, wanderRadius: 0 },
     { id: MAN, x: 3210, y: 3210, level: 0, remove: true },
     { id: MAN, x: 3230, y: 3230, level: 0, wanderRadius: 2 },
+    // A spawn moved away and then back onto its original tile: the removal
+    // comes first, so the later addition must survive.
+    { id: MAN, x: 3240, y: 3240, level: 0, remove: true },
+    { id: MAN, x: 3240, y: 3240, level: 0, wanderRadius: 6 },
+    // An addition followed by its removal is gone.
+    { id: MAN, x: 3260, y: 3260, level: 0, wanderRadius: 2 },
+    { id: MAN, x: 3260, y: 3260, level: 0, remove: true },
   ];
   DefinitionLoader.registerSource("npc_spawns", "test", {
     name: "canonical",
@@ -64,5 +73,14 @@ test("a remove record drops only the matching spawn", () => {
 
 test("a patch adds new spawns alongside the canonical ones", () => {
   assert.equal(spawnAt(3230, 3230, 0)?.getRadius(), 2);
-  assert.equal(NpcSpawnDefinition.all().length, 3);
+});
+
+test("a spawn moved back onto its original tile survives the removal", () => {
+  assert.equal(spawnAt(3240, 3240, 0)?.getRadius(), 6, "the later addition replaces the removed original");
+});
+
+test("a removal after an addition in the same patch still drops it", () => {
+  assert.equal(spawnAt(3260, 3260, 0), undefined);
+  assert.ok(spawnAt(3250, 3250, 0), "an untouched canonical spawn stays");
+  assert.equal(NpcSpawnDefinition.all().length, 5);
 });

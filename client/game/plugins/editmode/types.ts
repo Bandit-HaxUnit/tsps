@@ -275,6 +275,8 @@ export interface EditModeHost {
     describeDefinition?(kind: EditModeSearchKind, id: number): EditModeDefinitionSummary | undefined;
     loadShops?(): Promise<EditModeShop[]>;
     loadNpcInteractions?(): Promise<EditModeNpcInteractions>;
+    /** Saved npc-spawns-custom.json records, converted to editor edits. */
+    loadPersistedNpcSpawnEdits?(): Promise<EditModeEdit[]>;
     getNpcMenuOptions?(npcTypeId: number): readonly EditModeNpcMenuOption[];
     /** Cache-backed overlay colours and textures for the terrain palette. */
     isWaterOverlay?(id: number): boolean;

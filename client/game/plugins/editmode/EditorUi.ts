@@ -78,6 +78,8 @@ const INPUT_STYLE: Partial<CSSStyleDeclaration> = {
 const TOP_BAR_HEIGHT = EDITOR_TOP_BAR_HEIGHT;
 /** Gap below the top bar where floating panels and toasts start. */
 const TOP_BAR_CLEARANCE = EDITOR_TOP_BAR_CLEARANCE;
+/** The saved spawn patch only needs importing once per page, not per UI mount. */
+let persistedNpcSpawnsRequested = false;
 
 function npcClickKey(opcode: number): "first_click" | "second_click" | "third_click" | "fourth_click" | undefined {
     switch (opcode) {
@@ -506,6 +508,7 @@ class EditorChrome {
         document.body.classList.add("map-editor-active");
         this.sync();
         this.unsubscribe = plugin.subscribe(() => this.sync());
+        void this.importPersistedNpcSpawns();
     }
 
     remove(): void {
@@ -1402,6 +1405,27 @@ class EditorChrome {
         this.renderShopEditor();
     }
 
+    /**
+     * Pulls the server's saved spawn patch into this profile's edit list so a
+     * fresh profile can see and preserve the changes already in the file.
+     */
+    private async importPersistedNpcSpawns(): Promise<void> {
+        if (persistedNpcSpawnsRequested) return;
+        persistedNpcSpawnsRequested = true;
+        try {
+            const edits = await this.plugin.loadPersistedNpcSpawnEdits();
+            if (edits.length === 0) return;
+            if (this.plugin.importNpcSpawnEdits(edits)) {
+                this.savedNpcSpawnsKey = this.npcSpawnsKey();
+                this.syncSaveButton();
+            }
+        } catch (error) {
+            // Leave the one-shot open so a later mount can retry.
+            persistedNpcSpawnsRequested = false;
+            console.warn("[edit-mode] failed to import saved NPC spawns", error);
+        }
+    }
+
     private exportRegions(): void {
         try {
             if (!browserHostWindow()) this.plugin.setConfig({ saveObjectSpawns: false });
@@ -1423,7 +1447,8 @@ class EditorChrome {
                     ...(edit.wanderRadius === undefined ? {} : { wanderRadius: edit.wanderRadius }),
                     ...(edit.kind === "npcDelete" ? { remove: true } : {}),
                 }));
-            if (objectSpawns === undefined && exported.length === 0 && !world && customNpcs.length === 0 && !shopsDirty && !npcInteractionsDirty) {
+            const npcSpawnsDirty = this.npcSpawnsKey() !== this.savedNpcSpawnsKey;
+            if (objectSpawns === undefined && exported.length === 0 && !world && !npcSpawnsDirty && !shopsDirty && !npcInteractionsDirty) {
                 this.toast("No world or map edits to save");
                 return;
             }
@@ -1446,7 +1471,9 @@ class EditorChrome {
                     );
                     this.plugin.markWorldDefinitionSaved();
                 }
-                if (customNpcs.length) host.postMessage({ type: CUSTOM_NPC_SPAWNS_MESSAGE, spawns: customNpcs }, hostOrigin);
+                if (npcSpawnsDirty || customNpcs.length) {
+                    host.postMessage({ type: CUSTOM_NPC_SPAWNS_MESSAGE, spawns: customNpcs }, hostOrigin);
+                }
                 if (shopsDirty) {
                     host.postMessage(
                         { type: SHOP_DEFINITIONS_MESSAGE, contents: JSON.stringify(this.shops, null, 2) + "\n" },
@@ -1465,7 +1492,7 @@ class EditorChrome {
                     objectSpawns !== undefined ? "object additions/deletions" : "",
                     exported.length ? `${exported.length} edited region pack${exported.length === 1 ? "" : "s"}` : "",
                     world ? "world spawn" : "",
-                    customNpcs.length ? `${customNpcs.length} NPC spawn edit${customNpcs.length === 1 ? "" : "s"}` : "",
+                    customNpcs.length || npcSpawnsDirty ? "NPC spawn edits" : "",
                     shopsDirty ? "shops" : "",
                     npcInteractionsDirty ? "NPC shop actions" : "",
                 ].filter(Boolean).join(" and ");
@@ -1498,7 +1525,7 @@ class EditorChrome {
                 );
                 this.plugin.markWorldDefinitionSaved();
             }
-            if (customNpcs.length) {
+            if (npcSpawnsDirty || customNpcs.length) {
                 FileSaver.saveAs(
                     new Blob([formatCustomNpcSpawns(customNpcs.map(({ id, tileX: x, tileY: y, plane: level, direction, wanderRadius, remove }) => ({
                         id,
