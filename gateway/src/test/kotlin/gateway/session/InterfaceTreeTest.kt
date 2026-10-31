@@ -17,6 +17,12 @@ class InterfaceTreeTest {
         assertEquals(mainModal, tree.remap(mainModal))
         tree.setRoot(FIXED_ROOT)
         assertEquals((FIXED_ROOT shl 16) or 41, tree.remap(mainModal))
+        // The login root (165) has the main modal elsewhere; the welcome screen goes on its own slot.
+        tree.setRoot(InterfaceTree.LOGIN_ROOT)
+        assertEquals((InterfaceTree.LOGIN_ROOT shl 16) or 14, tree.remap(mainModal))
+        tree.gameframe(CHATBOX, mounted = true)
+        tree.setRoot(FIXED_ROOT)
+        assertEquals(listOf(tree.remap(CHATBOX, InterfaceTree.LOGIN_ROOT) to tree.remap(CHATBOX)), tree.moves(InterfaceTree.LOGIN_ROOT))
         // Components on other interfaces stay where they are.
         assertEquals((149 shl 16) or 0, tree.remap((149 shl 16) or 0))
     }
@@ -35,5 +41,7 @@ class InterfaceTreeTest {
 
     private companion object {
         const val FIXED_ROOT = 548
+        /** Where tsps mounts the chatbox (162). */
+        const val CHATBOX = (161 shl 16) or 96
     }
 }

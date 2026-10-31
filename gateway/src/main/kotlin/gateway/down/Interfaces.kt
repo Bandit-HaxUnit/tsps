@@ -7,6 +7,7 @@ import gateway.tsps.TspsPacket
 import gateway.tsps.TspsReader
 import gateway.tsps.TspsServerPacket
 import net.rsprot.protocol.game.outgoing.interfaces.IfCloseSub
+import net.rsprot.protocol.game.outgoing.interfaces.IfMoveSub
 import net.rsprot.protocol.game.outgoing.interfaces.IfOpenSub
 import net.rsprot.protocol.game.outgoing.interfaces.IfOpenTop
 import net.rsprot.protocol.game.outgoing.interfaces.IfSetAngle
@@ -47,10 +48,7 @@ class Interfaces(
     fun handle(packet: TspsPacket): Boolean {
         val reader = packet.reader()
         when (packet.opcode) {
-            TspsServerPacket.WIDGET_SET_ROOT -> {
-                tree.setRoot(reader.u16())
-                send(IfOpenTop(tree.root))
-            }
+            TspsServerPacket.WIDGET_SET_ROOT -> setRoot(reader.u16())
             TspsServerPacket.WIDGET_OPEN -> {
                 val group = reader.u16()
                 val modal = reader.u8() != 0
@@ -63,7 +61,9 @@ class Interfaces(
             TspsServerPacket.WIDGET_CLOSE -> tree.targetOf(reader.u16())?.let { send(IfCloseSub(it ushr 16, it and 0xFFFF)) }
             TspsServerPacket.WIDGET_OPEN_SUB -> openSubBundle(reader)
             TspsServerPacket.WIDGET_CLOSE_SUB -> {
-                val target = tree.remap(reader.i32())
+                val raw = reader.i32()
+                tree.gameframe(raw, mounted = false)
+                val target = tree.remap(raw)
                 tree.unmounted(target)
                 send(IfCloseSub(target ushr 16, target and 0xFFFF))
             }
@@ -121,6 +121,27 @@ class Interfaces(
         }
     }
 
+    /**
+     * tsps shows the welcome screen as the browser's root. Live keeps the game behind it: it logs
+     * in on root 165 with the gameframe moved there and the welcome screen as a modal in 165:40,
+     * and on Play closes it and moves the gameframe to the player's root. As the root alone, the
+     * client had no game view: the login screen stayed behind it, with "Loading - please wait".
+     */
+    private fun setRoot(group: Int) {
+        val from = tree.root
+        val welcome = welcomeShown
+        welcomeShown = group == WELCOME_SCREEN
+        if (welcome) send(IfCloseSub(InterfaceTree.LOGIN_ROOT, InterfaceTree.WELCOME_SLOT))
+        tree.setRoot(if (welcomeShown) InterfaceTree.LOGIN_ROOT else group)
+        send(IfOpenTop(tree.root))
+        if (welcome || welcomeShown) {
+            for ((source, target) in tree.moves(from)) send(IfMoveSub(source ushr 16, source and 0xFFFF, target ushr 16, target and 0xFFFF))
+        }
+        if (welcomeShown) openSub((InterfaceTree.LOGIN_ROOT shl 16) or InterfaceTree.WELCOME_SLOT, WELCOME_SCREEN, MODAL)
+    }
+
+    private var welcomeShown = false
+
     private fun openSub(target: Int, group: Int, type: Int) {
         tree.mounted(target, group)
         send(IfOpenSub(target ushr 16, target and 0xFFFF, group, type))
@@ -128,7 +149,8 @@ class Interfaces(
 
     /** `WIDGET_OPEN_SUB`: target, group, type, then varps, varbits, hidden uids, pre and post scripts. */
     private fun openSubBundle(reader: TspsReader) {
-        val target = tree.remap(reader.i32())
+        val raw = reader.i32()
+        val target = tree.remap(raw)
         val group = reader.u16()
         val type = reader.u8()
         repeat(reader.optionalU8()) { varp(reader.u16(), reader.i32()) }
@@ -141,6 +163,7 @@ class Interfaces(
             DropCounter.down(TspsServerPacket.WIDGET_OPEN_SUB)
             return
         }
+        tree.gameframe(raw, mounted = true)
         openSub(target, group, type)
         for (uid in hidden) if (exists(uid)) send(IfSetHide(uid ushr 16, uid and 0xFFFF, true)) else dropped()
         postScripts.forEach(send)
@@ -211,6 +234,7 @@ class Interfaces(
         /** Counted as its own "opcode": a widget message for a component the cache doesn't have. */
         const val DROPPED_COMPONENT = -1
         const val MODAL = 0
+        const val WELCOME_SCREEN = 378
         const val CUSTOM_INTERFACE_START = 30_000
         const val ARG_STRING = 0
         const val ARG_LONG = 2

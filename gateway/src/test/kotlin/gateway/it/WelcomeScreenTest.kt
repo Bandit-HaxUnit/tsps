@@ -1,11 +1,16 @@
 package gateway.it
 
+import net.rsprox.protocol.game.outgoing.model.interfaces.IfCloseSub
+import net.rsprox.protocol.game.outgoing.model.interfaces.IfMoveSub
+import net.rsprox.protocol.game.outgoing.model.interfaces.IfOpenSub
 import net.rsprox.protocol.game.outgoing.model.interfaces.IfOpenTop
 import net.rsprox.protocol.game.outgoing.model.map.RebuildLoginV2
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-/** Returning accounts log in to the welcome screen; its play button needs IF_BUTTONX to reach tsps. */
+/** Returning accounts log in to the welcome screen, laid out as live; its play button needs IF_BUTTONX to reach tsps. */
 class WelcomeScreenTest {
     private val modulus = LiveGateway.gateway.rsa.modulus
 
@@ -22,11 +27,26 @@ class WelcomeScreenTest {
                 .first { it.code == OK }
                 .game!!
         game.use {
-            // tsps mounts the gameframe at login, then swaps the welcome screen in the same tick; the
-            // login burst before it carries every plugin's restored state.
-            while (it.expect<IfOpenTop>(limit = LOGIN_PACKETS).interfaceId != WELCOME_SCREEN) continue
+            // As live: the login root (165) with the gameframe moved onto it, and the welcome screen
+            // as a modal in its slot; never the welcome screen as the root. tsps mounts the gameframe
+            // first; the login burst before carries every plugin's restored state.
+            var moved = 0
+            var welcome: IfOpenSub? = null
+            while (welcome == null) {
+                when (val message = it.next() ?: error("stream ended")) {
+                    is IfOpenTop -> assertNotEquals(WELCOME_SCREEN, message.interfaceId, "the welcome screen as the root")
+                    is IfMoveSub -> moved++
+                    is IfOpenSub -> if (message.interfaceId == WELCOME_SCREEN) welcome = message
+                }
+            }
+            assertEquals(LOGIN_ROOT to WELCOME_SLOT, welcome.destinationInterfaceId to welcome.destinationComponentId)
+            assertTrue(moved > 0, "the gameframe moves onto the login root")
+
             it.button(WELCOME_SCREEN, PLAY_BUTTON)
-            assertNotEquals(WELCOME_SCREEN, it.expect<IfOpenTop>(limit = 2_000).interfaceId)
+            val closed = it.expect<IfCloseSub>(limit = 2_000)
+            assertEquals(LOGIN_ROOT to WELCOME_SLOT, closed.interfaceId to closed.componentId)
+            assertNotEquals(LOGIN_ROOT, it.expect<IfOpenTop>(limit = 10).interfaceId, "Play leaves the login root")
+            assertTrue(it.next() is IfMoveSub, "and moves the gameframe back")
         }
     }
 
@@ -36,6 +56,8 @@ class WelcomeScreenTest {
         const val OK = 2
         const val WELCOME_SCREEN = 378
         const val PLAY_BUTTON = 72
+        const val LOGIN_ROOT = 165
+        const val WELCOME_SLOT = 40
         const val RELOGIN_ATTEMPTS = 20
         const val RELOGIN_WAIT_MS = 1_000L
     }
