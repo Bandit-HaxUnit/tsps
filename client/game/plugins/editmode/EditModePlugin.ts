@@ -667,11 +667,14 @@ export class EditModePlugin {
             this.commit();
             return;
         }
-        const indices = this.npcEditIndicesAt(selection);
         if (this.customNpcEditIndex(selection) >= 0) {
-            this.removeEdits(indices);
+            // A saved patch can hold a removal marker beside the replacement at
+            // this tile (a canonical spawn moved away and back). Keep the marker:
+            // it is what suppresses the canonical spawn, so dropping it would
+            // bring the original back as soon as the patch reloads.
+            this.removeEdits(this.npcReplacementIndicesAt(selection));
         } else {
-            this.removeEdits(indices);
+            this.removeEdits(this.npcEditIndicesAt(selection));
             const spawn = selection.npcSpawn ?? {
                 id: selection.locId,
                 tileX: selection.tileX,
@@ -754,6 +757,17 @@ export class EditModePlugin {
                 ? [index]
                 : [],
         );
+    }
+
+    /**
+     * The edits that make up an editor-placed NPC at the selected tile: its
+     * spawn and wander override, never a removal marker. A marker with the same
+     * type and tile suppresses the canonical spawn the replacement stands in
+     * for, so removing the replacement has to leave it behind.
+     */
+    private npcReplacementIndicesAt(selection: EditModeSelection): number[] {
+        return this.npcEditIndicesAt(selection).filter((index) =>
+            this.config.edits[index].kind !== "npcDelete");
     }
 
     private removeEdits(indices: readonly number[]): void {
@@ -1057,7 +1071,12 @@ export class EditModePlugin {
             this.selection = undefined;
             host.clearSelectionHighlight?.();
             const customIndex = this.customNpcEditIndex(moving);
-            this.removeEdits(this.npcEditIndicesAt(moving));
+            // Moving a replacement away leaves the canonical spawn's removal
+            // marker in place, exactly as deleting it does; otherwise the
+            // original returns beside the moved copy.
+            this.removeEdits(customIndex >= 0
+                ? this.npcReplacementIndicesAt(moving)
+                : this.npcEditIndicesAt(moving));
             if (moving.npcWanderRadius !== undefined) edit.wanderRadius = moving.npcWanderRadius;
             if (moving.npcSpawn?.direction !== undefined) edit.direction = moving.npcSpawn.direction;
             const edits: EditModeEdit[] = [];

@@ -183,6 +183,49 @@ assert.equal(plugin.importNpcSpawnEdits(imported), false, "re-importing the same
 assert.deepEqual(calls, []);
 assert.equal(plugin.getConfig().edits.length, 2, "imported edits are retained for export");
 
+// A spawn moved away and back to its own tile loads as [remove A, add A]: the
+// replacement sits on top of the canonical spawn's removal marker.
+const moveBackPatch = [
+    { kind: "npcDelete" as const, locId: 3, tileX: 3240, tileY: 3240, plane: 0, shape: 0, rotation: 0 },
+    { kind: "npc" as const, locId: 3, tileX: 3240, tileY: 3240, plane: 0, shape: 10, rotation: 0 },
+];
+pointer = { tileX: 3240, tileY: 3240, plane: 0 };
+const moveBackSelection = (): EditModeSelection => ({
+    kind: "npc", tileX: 3240, tileY: 3240, plane: 0,
+    locId: 3, locName: "Goblin", npcSource: "custom", npcWanderRadius: 5,
+});
+
+// Deleting the replacement removes it but keeps the marker, so the canonical
+// spawn stays gone instead of returning from underneath.
+plugin.clearEdits();
+plugin.importNpcSpawnEdits(moveBackPatch);
+selected = moveBackSelection();
+plugin.applyAtPointer();
+calls.length = 0;
+canvas.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Delete", code: "Delete", bubbles: true }));
+assert.deepEqual(plugin.getConfig().edits, [
+    { kind: "npcDelete", locId: 3, tileX: 3240, tileY: 3240, plane: 0, shape: 0, rotation: 0 },
+], "deleting a replacement keeps the canonical spawn's removal marker");
+assert.equal(calls.some(([name]) => name === "showNpcSpawn"), false, "the canonical spawn stays hidden");
+assert.ok(calls.some(([name]) => name === "despawnNpc"), "the deleted replacement is despawned");
+
+// Moving it again keeps the marker too, so the original cannot reappear beside
+// the moved copy.
+plugin.clearEdits();
+plugin.importNpcSpawnEdits(moveBackPatch);
+selected = moveBackSelection();
+plugin.applyAtPointer();
+plugin.moveSelection();
+pointer = { tileX: 3244, tileY: 3240, plane: 0 };
+plugin.applyAtPointer();
+assert.deepEqual(plugin.getConfig().edits, [
+    { kind: "npcDelete", locId: 3, tileX: 3240, tileY: 3240, plane: 0, shape: 0, rotation: 0 },
+    {
+        kind: "npc", locId: 3, tileX: 3244, tileY: 3240, plane: 0, shape: 10, rotation: 0,
+        wanderRadius: 5,
+    },
+], "moving a replacement leaves the canonical removal marker behind");
+
 // Deleting the last saved custom NPC still writes an empty patch, so the old
 // file can no longer spawn it.
 plugin.clearEdits();
@@ -191,22 +234,48 @@ plugin.importNpcSpawnEdits([{
 }]);
 const { mountEditorUi } = require("../game/plugins/editmode/EditorUi");
 const FileSaver = require("file-saver");
-const savedFiles: Array<{ name: string; size: number }> = [];
+const savedFiles: Array<{ name: string; contents: Promise<string> }> = [];
 const originalSaveAs = FileSaver.saveAs;
-FileSaver.saveAs = (blob: Blob, name: string) => { savedFiles.push({ name, size: blob.size }); };
+FileSaver.saveAs = (blob: Blob, name: string) => {
+    savedFiles.push({ name, contents: blob.text() });
+};
 const removeUi = mountEditorUi(plugin);
-plugin.clearEdits();
 const download = [...document.querySelectorAll('[role="toolbar"] button')]
     .find((button) => button.getAttribute("aria-label") === "Download world and map edits") as HTMLButtonElement;
 assert.ok(download, "standalone editors have the download action");
-download.click();
-FileSaver.saveAs = originalSaveAs;
-removeUi();
-assert.ok(
-    savedFiles.some((file) => file.name === "npc-spawns-custom.json" && file.size === 3),
-    "an emptied spawn list still exports [] instead of reporting nothing to save",
-);
+const savedNpcPatch = async (): Promise<string> => {
+    download.click();
+    const file = savedFiles.find((saved) => saved.name === "npc-spawns-custom.json");
+    assert.ok(file, "the editor writes npc-spawns-custom.json");
+    return file.contents;
+};
 
-plugin.clearEdits();
-dom.window.close();
-console.log("Edit mode NPC spawn tests passed");
+void (async () => {
+    plugin.clearEdits();
+    assert.equal(
+        await savedNpcPatch(), "[]\n",
+        "an emptied spawn list still exports [] instead of reporting nothing to save",
+    );
+
+    // Deleting the moved-back replacement downloads its removal, not nothing.
+    savedFiles.length = 0;
+    plugin.clearEdits();
+    plugin.importNpcSpawnEdits(moveBackPatch);
+    selected = moveBackSelection();
+    plugin.applyAtPointer();
+    canvas.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Delete", code: "Delete", bubbles: true }));
+    assert.equal(
+        await savedNpcPatch(),
+        '[\n  {"id":3,"x":3240,"y":3240,"level":0,"remove":true}\n]\n',
+        "the exported patch still suppresses the canonical spawn",
+    );
+    FileSaver.saveAs = originalSaveAs;
+    removeUi();
+    plugin.clearEdits();
+    dom.window.close();
+    console.log("Edit mode NPC spawn tests passed");
+})().catch((error) => {
+    FileSaver.saveAs = originalSaveAs;
+    console.error(error);
+    process.exit(1);
+});
