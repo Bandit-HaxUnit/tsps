@@ -22,11 +22,13 @@ yarn gateway:test   # unit tests; the integration tests (it/) need `yarn start` 
 ```
 
 Tests that need `::` commands (teleports, instances) run as tsps's developer account: start tsps
-with `DEV_USERNAME=<name>` and run the tests with the same variable. Without it they're skipped.
+with `DEV_USERNAME=<names>` (comma-separated) and run the tests with the same variable. They play
+the last name, so you can play the first one meanwhile. Without it they're skipped; they also
+skip while someone is logged in on the tests' account.
 
 ```bash
-DEV_USERNAME=gwdev yarn start
-DEV_USERNAME=gwdev yarn gateway:test
+DEV_USERNAME=gwdev,gwtest yarn start
+DEV_USERNAME=gwdev,gwtest yarn gateway:test
 ```
 
 The gateway reads its ports from the root `.env`, the same block `scripts/wt` writes

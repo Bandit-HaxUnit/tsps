@@ -20,8 +20,11 @@ object LiveGateway {
         Gateway.start(config.copy(gatewayPort = port)).also { Runtime.getRuntime().addShutdownHook(Thread(it::stop)) }
     }
 
-    /** tsps's developer account (`DEV_USERNAME`), when one is configured. */
-    val developerName: String? = System.getenv("DEV_USERNAME")?.takeIf { it.isNotBlank() }
+    /**
+     * The developer account the tests play: the last of tsps's `DEV_USERNAME` (comma-separated),
+     * so with `gwdev,gwtest` someone can play `gwdev` while the tests run.
+     */
+    val developerName: String? = System.getenv("DEV_USERNAME")?.split(',')?.map { it.trim() }?.lastOrNull { it.isNotEmpty() }
 
     fun client() = HeadlessClient("127.0.0.1", gateway.config.gatewayPort)
 

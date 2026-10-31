@@ -215,9 +215,12 @@ type PendingLogin = {
   loginTokens: LoginTokenEntry[] | null;
 };
 
+/** Whether `username` is one of `DEV_USERNAME`'s accounts (comma-separated). */
 export function isConfiguredDeveloperUsername(username: string): boolean {
-  const developerUsername = process.env.DEV_USERNAME?.trim();
-  return !!developerUsername && developerUsername.toLowerCase() === username.toLowerCase();
+  const name = username.toLowerCase();
+  return (process.env.DEV_USERNAME ?? "")
+    .split(",")
+    .some((developer) => developer.trim() !== "" && developer.trim().toLowerCase() === name);
 }
 
 export class NetworkBuilder {
