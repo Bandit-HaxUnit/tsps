@@ -130,7 +130,11 @@ When the crashes, the flares and the waves come is an estimate from the scim.gg 
 | 9 | His line: a perfect kill, a close one (a quarter of the player's hitpoints or less), or the usual. | capture ("Effective, if a bit cowardly."), transcript |
 | 11 | The loot, in front of the throne at (1503, 10088). | capture, Wiki |
 
-The loot is NpcDrops' roll of the Wiki table without its Contract section (what his contracts reward; `npc-drop-overrides.json` `removeSections`).
+The loot is NpcDrops' roll of the Wiki table without its Contract section (what his contracts reward; `npc-drop-overrides.json` `removeSections`). The export models the Wiki's conditional unique chain as independent separate rolls (horn 2/600, each armour piece 1/600, dossier 1/12, lockbox 1/33, shards 1/17), so the effective rates match but more than one can land on a kill where OSRS stops at the first success.
+
+### The Forgotten lockbox
+
+The 1/33 Forgotten lockbox (`Open`) rolls one reward from the Wiki's 403 chances: dragon bolts (unf) 125 or dragon darts 125/80, oathplate shards 14/11, dragon platelegs or plateskirt, 233,333 coins, or an oathplate helm/chest/legs. The messages are the Wiki transcript's. There is no rsprox capture of an opening: the Yama submissions (3389, 3386, 3347, 3340, 3284, 800, 799, 788, 3285, 2644) have none, and the database has no `Forgotten lockbox` item search. Entrana's "You can't open that here" is not implemented.
 
 ## Death
 
