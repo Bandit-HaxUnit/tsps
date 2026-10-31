@@ -8,6 +8,7 @@ import net.rsprox.protocol.game.outgoing.model.misc.client.ServerTickEnd
 import net.rsprox.protocol.game.outgoing.model.varp.VarpLarge
 import net.rsprox.protocol.game.outgoing.model.varp.VarpSmall
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /** M10: settings the official client keeps itself, and the XP drops setup tsps saves for it. */
@@ -17,7 +18,9 @@ class M10SettingsTest {
         val name = LiveGateway.newAccount("gwaud")
         LiveGateway.login(name).use { game ->
             game.expect<RebuildLoginV2>()
-            game.until(TICKS)
+            // The client sends the slider's trigger only with the transmit-trigger event, as live sets it.
+            val events = game.until(TICKS).filterIsInstance<IfSetEventsV2>().filter { it.interfaceId == SETTINGS_SIDE && it.componentId == MUSIC_SLIDER }
+            assertTrue(events.isNotEmpty() && events.all { it.events1 and TRANSMIT_TRIGGER != 0 }, "116:109's events: $events")
             // The music slider's script (9238) sets the varp in the client and triggers 116:109
             // with the new volume when the slider is released.
             game.scriptTrigger(SETTINGS_SIDE, MUSIC_SLIDER, VOLUME)
@@ -85,6 +88,7 @@ class M10SettingsTest {
         }
 
     private companion object {
+        const val TRANSMIT_TRIGGER = 1 shl 23
         const val TICKS = 4
         const val PACKETS = 5_000
         const val SETTINGS_SIDE = 116

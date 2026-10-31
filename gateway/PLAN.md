@@ -9,11 +9,11 @@ and counted.
 M0–M13 are done: login through trade, settings, the character designer, NPC model changes and
 tint, chat colours, and sailing. `COVERAGE.md` has no `todo` rows, and `yarn gateway:test` runs 56
 tests, live ones included. Fixes from play in RuneLite: forced movement (agility), instance
-rebuilds, scenes in private areas on the real map (the Fractured Archive), bank drags and tabs.
+rebuilds, scenes in private areas on the real map (the Fractured Archive), bank drags and tabs,
+the welcome screen laid out as live, and volume sliders saved as live does (both from RSProx
+recordings of live).
 
 Open:
-- Volume levels don't persist across logins.
-- The welcome screen shows on a black background with a "Loading" box over it.
 - Insert-mode bank drags, and two players on one boat, are untested.
 
 ## Decisions
