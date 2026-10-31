@@ -1,6 +1,6 @@
 # Vale Totems
 
-The Fletching minigame in the Auburn Valley, built from the OSRS Wiki ("Vale Totems", "Totem site", "Vale offerings", the Vale Totem creation template), rsprox captures (recordings 1098, 1100, 1105, 1108, 3127 and 3276 on https://rsprox.net/database) and the cache. It is one plugin, `server/plugins/minigames/ValeTotems.plugin.js`, with its units in `server/plugins/minigames/valetotems/` and its data in `server/plugins/minigames/data/vale-totems.json`.
+The Fletching minigame in the Auburn Valley, built from the OSRS Wiki ("Vale Totems", "Totem site", "Vale offerings", the Vale Totem creation template), rsprox captures (recordings 1098, 1100, 1105, 1108, 3127 and 3276 on https://rsprox.net/database) and the cache. It is one plugin, `server/plugins/minigames/ValeTotems.plugin.js`, with its units in `server/plugins/minigames/valetotems/` and its data in `server/plugins/minigames/data/vale-totems.json`. The accompanying miniquest is the Quests plugin's `server/plugins/quests/quests/ValeTotems.Quest.js`.
 
 The captures were all recorded on Leagues VI and Grid Master worlds. Leagues multiplies the offerings a player collects by 4 (the Wiki calculator's "League offering multiplier"): the captured pile varbit held 10 for a decorated oak totem and "You collect 40 offerings." followed. Everything else matched the Wiki, so the plugin follows the varbit and the Wiki.
 
@@ -11,9 +11,9 @@ Status:
   - the spirit NPCs at each site;
   - claiming and inspecting offerings;
   - Rummage, Hasty-rummage and Inspect on Vale offerings, with the loot table, research points and collection log;
+  - the Vale Totems miniquest (Ranulph and Isadora): the intro, the build/carve/decorate lessons, the scripted 100-offering visit and the Sacraments of Ent Folk reward. The minigame's other sites stay closed until it is complete;
   - `::entvisit` for testing.
 - **Not done:**
-  - the Vale Totems miniquest (Ranulph and Isadora). Until it exists, anyone with the Fletching level can play;
   - the ents walking their route, ent trails (double offerings and +15% xp for four actions, `ent_totems_trail_*`), and admiring beautiful scenery for run energy;
   - the durability leaves above a totem (a head icon on `ent_totems_site_icon`) and the spirits' spawn and despawn animations;
   - Ranulph's Vale Research Exchange (research points to spend);
@@ -32,6 +32,8 @@ Status:
 | `Ents.ValeTotems.js` | The 80-tick visit cycle and the spirit NPC spawns. |
 | `Commands.ValeTotems.js` | `::entvisit`. |
 
+The miniquest lives with the other quests in `server/plugins/quests/quests/ValeTotems.Quest.js`; it owns Ranulph's and Isadora's conversations, the three chat varbits and the site-1 gate.
+
 ## State
 
 A player's state is the client's own varps, which the cache's multilocs and multi-NPCs read: `ent_totems_site_N_a` and `_b` for each site, and `ent_totems_research_points`. They are saved as one attribute (`vale-totems:varps`) and sent again at login.
@@ -49,6 +51,27 @@ A player's state is the client's own varps, which the cache's multilocs and mult
 | `site_N_multianimal_a..e_1` | 1 shows that spirit's NPC (`ent_totems_site_N_animal_X_1`). |
 
 The sites' base locs are `ent_totems_site_N_base` (57016 + 6 × (N − 1)), with the offerings loc beside it. Sites 2 and 6 were never clicked in the captures; their tiles are the Wiki's two remaining Totem site locations.
+
+## Miniquest
+
+The route and stage values come from Quest Helper (`helpers/miniquests/valetotems/ValeTotems.java`); the words are the Wiki's "Vale Totems (miniquest)" transcript. Progress is `ent_totems_intro` (varbit 17227), the same varbit the cache's own script reads:
+
+| Value | Meaning |
+| --- | --- |
+| 0 | Not started. Ranulph offers the miniquest after Children of the Sun and level 20 Fletching. |
+| 10 | Accepted; the intro conversation plays. |
+| 20 | A login checkpoint while the intro is unfinished. Talking continues it. |
+| 30 | Rebuild, carve and decorate site 1. |
+| 40 | Decorated; talk to Ranulph or Isadora. |
+| 50 | The ents left 100 offerings; claim them. |
+| 60 | Offering claimed; talk to Ranulph or Isadora. |
+| 70 | Complete; the Sacraments of Ent Folk (item 31016) and the minigame are rewarded. |
+
+Three chat varbits mirror the lessons: `ent_totems_broken_chat` (17228), `ent_totems_carve_chat` (17229) and `ent_totems_decorate_chat` (17230). Until Isadora teaches carving the Carve option says "You're not quite sure how to carve the totem. Ranulph and Isadora might be able to help."; until Ranulph teaches decorating, Decorate says the same about decorating. Building the quest totem also prints "... It's now ready to be carved. Ranulph and Isadora might be able to tell you how." and does not open the carve menu.
+
+The minigame asks the quest plugin through the custom event `vale-totems:access` which sites are open. During the miniquest only site 1 is; after stage 70 every site is. The reverse direction uses `vale-totems:decorated` (the fourth decoration moves 30 to 40) and `vale-totems:offerings-claimed` (moves 50 to 60). The scripted visit in the stage-40 conversation sets site 1's pile to 100 offerings, matching the transcript.
+
+Not represented from the transcript: the ent cutscene (played as dialogue, with no camera or ent walk), and a separate warning branch for carving an animal that is not nearby.
 
 ## Captured behaviour
 
@@ -79,8 +102,11 @@ These are not in the captures or the Wiki:
 - **Wrong animals:** one maple totem with one wrong animal got 6 offerings instead of 10, the only sample. Each wrong animal takes 40% off here. The Wiki only says "significantly fewer".
 - **Messages:** "You need a Fletching level of 50 to build a maple totem.", "You need a knife to carve the totem.", "Hasty-rummage twice/three times/five times", and the pile's Inspect above twenty, which shows digits.
 - **Log choice:** with several logs, the best one the player has the level for is used.
+- **Quest refusals:** the requirement refusal ("...you'll need a Fletching level of 20 first.") and the site gate ("You need to complete the Vale Totems miniquest before you can help the ents here.") are not in the transcript. The knife hand-out uses Isadora's transcript lines.
 
 ## Checking it
 
 - `node --test server/tests/vale-totems.test.cjs` (after `yarn build`) covers building, carving, decorating, visits, claiming and rummaging.
-- With the agent MCP: teleport to site 3 (`tele 1386 3276 0`), give oak logs, a knife and four oak shortbows (u), then `object_option` Build, Carve and Decorate on loc 57028 at 1385, 3274. `::entvisit` runs a visit at once.
+- `node --test server/tests/vale-totems-quest.test.cjs` covers the quest registration, the site gate, the intro, the two lessons, the scripted 100 offerings and completion.
+- With the agent MCP: teleport to site 3 (`tele 1386 3276 0`), give oak logs, a knife and four oak shortbows (u), then `object_option` Build, Carve and Decorate on loc 57028 at 1385, 3274. `::entvisit` runs a visit at once. The minigame now requires the miniquest, so complete it first or set stage 70.
+- Miniquest by hand: talk to Ranulph at 1366, 3367, build at 1370, 3375, carve the three nearby spirits, decorate with four oak items, talk again, claim the 100 offerings and talk once more. The `::entvisit` command is not needed for the scripted offering.
