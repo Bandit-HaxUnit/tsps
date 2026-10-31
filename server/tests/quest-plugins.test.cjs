@@ -7469,14 +7469,18 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     assert.equal(objectInteractions.find(h => h.name === 'handleObjectInteraction')(outerDoor), true);
     assert.equal(quest.getStage(player), 1);
     const area = attrs.get('desert-treasure-ii:ancient-vault');
-    assert.equal(area.width, 4);
-    assert.equal(area.height, 4);
-    assert.equal(player.location.x, 8202);
-    assert.equal(player.location.y, 1615);
+    assert.equal(area.width, 8);
+    assert.equal(area.height, 8);
+    assert.equal(player.location.x - area.getBaseX() + 3904, 3929, 'live arrival tile');
+    assert.equal(player.location.y - area.getBaseY() + 9600, 9631);
     assert.equal(queues.add[0].id, 12291, 'the room receives the cache Asgarnia Smith variant with Talk-to');
-    assert.equal(chunks.filter(([plane, , , chunk]) => plane === 1 && chunk !== null).length, 16);
+    for (const plane of [0, 1, 2]) {
+      assert.equal(chunks.filter(([p, , , chunk]) => p === plane && chunk?.sourcePlane === plane).length, 64,
+        `the whole map square is copied onto plane ${plane}, as live builds it`);
+    }
+    assert.equal(chunks.filter(([plane, , , chunk]) => plane === 3 && chunk !== null).length, 0);
     const inspect = (id, x, y) => objectInteractions.find(h => h.name === 'handleObjectInteraction')({
-      player, objectId: id, location: area.tile(x - 3920, y - 9616, 1),
+      player, objectId: id, location: area.tile(x - 3904, y - 9600, 1),
     });
     assert.equal(inspect(49499, 3941, 9635), true);
     assert.equal(interactions.find((entry) => entry.name === 'Asgarnia Smith').options['Talk-to']({ player, npcId: 1 }), undefined);
@@ -7547,7 +7551,7 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
   attrs.set('desert-treasure-ii:first-medallion-meeting', true);
   assert.equal(objectHooks[0]({ player: p, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } }), true);
   const area = attrs.get('desert-treasure-ii:ancient-vault');
-  const location = area.tile(21, 19, 1);
+  const location = area.tile(37, 35, 1);
   assert.equal(itemHooks[0]({ player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49501, location }), undefined,
     'a medallion cannot be placed on another general’s statue');
   assert.equal(counts.get(I.VARDORVIS_MEDALLION), 1);
@@ -7610,7 +7614,7 @@ test('Desert Treasure II consumes the four earned medallions in route order befo
   const placement = (id, index, medal) => {
     counts.set(medal, 1);
     const [x, y] = [[3941, 9635], [3931, 9635], [3931, 9625], [3941, 9625]][index];
-    const event = { player, itemId: medal, objectId: id, location: area.tile(x - 3920, y - 9616, 1), handled: false };
+    const event = { player, itemId: medal, objectId: id, location: area.tile(x - 3904, y - 9600, 1), handled: false };
     itemHooks[0](event);
     return event;
   };
@@ -7680,8 +7684,9 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
       'the scene does not skip the Mysterious Figure dialogue');
     customEvents.find(({ name }) => name === 'npc-dialogue:action').handler({ player, stepId: 'NoRYcT' });
     assert.ok(attrs.get('desert-treasure-ii:ancient-vault'), 'the dialogue action resumes the vault scene');
-    assert.equal(player.location.x, 8202);
-    assert.equal(player.location.y, 1615);
+    const vault = attrs.get('desert-treasure-ii:ancient-vault');
+    assert.equal(player.location.x - vault.getBaseX(), 25);
+    assert.equal(player.location.y - vault.getBaseY(), 31);
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -8737,7 +8742,7 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
       'the cache staircase returns the player to the upper Ancient Vault');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
-    assert.equal(p.location.x, 8202, 'the player is back in the private upper vault');
+    assert.equal(p.location.x - attrs.get('desert-treasure-ii:ancient-vault').getBaseX(), 25, 'the player is back in the private upper vault');
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -11327,7 +11332,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   });
   const statue = 49503;
   statueAction({ player, itemId: I.SUCELLUS_MEDALLION, objectId: statue,
-    location: { x: 5022, y: 6018, z: 1 } });
+    location: { x: 5038, y: 6034, z: 1 } });
   assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 0,
     'an earned legacy medallion can still be placed at the Sucellus statue');
   assert.equal(quest.getStage(player), 10, 'placing the legacy medal does not rewind or advance the saved quest stage');
