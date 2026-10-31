@@ -625,8 +625,10 @@ function accept(player, session, botEvent = "duelarena:accept") {
   if (!session.players.every(inZone) || !nearby(...session.players) || session.players.some(p => p.getHitpoints() <= 0 || inCombat(p))) return end(session);
   if (session.players.some((p, i) => snapshot(p) !== session.snapshots[i])) return showOptions(session, "Items changed. Please review the duel again.");
   // Either side's stake commits both: an Ironman refuses a staked duel even when the stake is
-  // the opponent's, so they can never win it. A free duel is still fine.
-  if ([...session.offers.values()].some(offer => offer.size) && !allowStake(player, session)) return;
+  // the opponent's, so they can never win it. Re-check both players on every acceptance, since
+  // a mode can change between the two final confirmations. A free duel is still fine.
+  if ([...session.offers.values()].some(offer => offer.size)
+      && !session.players.map(p => allowStake(p, session)).every(Boolean)) return;
   if (!canStart(session)) return;
   if (session.accepted.has(player)) return acceptBots(session, botEvent);
   session.accepted.add(player);
@@ -798,6 +800,6 @@ module.exports = {
     api.onServerShutdown(shutdown);
     Scoreboard.attach(api);
   },
-  /** For server/tests/pvp-arena-scoreboard.test.cjs. */
-  _test: { end, sessions },
+  /** For server/tests/pvp-arena-scoreboard.test.cjs and server/tests/ironman.test.cjs. */
+  _test: { accept, end, sessions, snapshot },
 };

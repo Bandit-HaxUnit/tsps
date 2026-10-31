@@ -81,7 +81,8 @@ Generic additions for these rules:
 - **`ShopManager`** asks `shop:buy-limit` `{ player, shopId, itemId, available, original, limit, message }` before a purchase.
 - **The Grand Exchange** asks `grand-exchange:can-open` `{ player, allow, message }` before opening.
 - **The Duel Arena** asks `duelarena:can-stake` `{ player, session, allow, message }` before an
-  item is offered and before a staked duel is accepted.
+  item is offered and, whenever a staked duel is accepted, for both players, so a mode change
+  between the two final confirmations still refuses it.
 
 ## Not done yet
 

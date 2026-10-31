@@ -10,6 +10,8 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
+const { DuelState } = require("../dist/game/content/Duelling");
+const DuelArena = require("../plugins/minigames/DuelArena.plugin");
 
 let core;
 const hooks = {};
@@ -30,6 +32,9 @@ before(async () => {
       custom[name]?.(payload);
     },
   }, { get: (target, key) => (key in target ? target[key] : on(String(key))) });
+  // DuelArena first: this harness keeps one handler per core hook, and the Ironman rules below
+  // must be the ones that answer.
+  DuelArena.register(api);
   require("../plugins/modes/Ironman.plugin").register(api);
 });
 
@@ -105,6 +110,42 @@ test("an Ironman can't stake in the Duel Arena; a free duel is fine", () => {
   const main = { player: account("main"), allow: true, message: null };
   custom["duelarena:can-stake"](main);
   assert.equal(main.allow, true);
+});
+
+test("a mode change between the two final acceptances refuses the staked duel", (t) => {
+  const staker = account("staker");
+  const opponent = account("opponent");
+  for (const [player, x] of [[staker, 3330], [opponent, 3331]]) {
+    player.setLocation(new core.Location(x, 3250, 0));
+  }
+  staker.getInventory().adds(995, 1000);
+  const session = {
+    players: [staker, opponent], mask: 0, accepted: new Set(), stage: "confirm",
+    offers: new Map([[staker, new Map([[0, new core.Item(995, 1000)]])], [opponent, new Map()]]),
+  };
+  session.snapshots = session.players.map(DuelArena._test.snapshot);
+  for (const player of session.players) {
+    DuelArena._test.sessions.set(player, session);
+    player.getDueling().setState(DuelState.CONFIRM_SCREEN);
+  }
+
+  // The staker offers coins and confirms the duel as a normal account.
+  DuelArena._test.accept(staker, session);
+  assert.deepEqual([...session.accepted], [staker]);
+
+  const findPlayer = core.World.getPlayerByName;
+  core.World.getPlayerByName = (name) => (name === "staker" ? staker : undefined);
+  t.after(() => { core.World.getPlayerByName = findPlayer; });
+  hooks["command:ironman"]({ player: account("admin"), parts: ["ironman", "ironman", "staker"] });
+  staker.messages.length = 0;
+
+  // The opponent's confirmation re-checks the staker, who is now an Ironman.
+  DuelArena._test.accept(opponent, session);
+  assert.equal(session.stage, "confirm", "the duel never starts");
+  assert.deepEqual([...session.accepted], [staker], "the opponent is not accepted either");
+  assert.deepEqual(staker.messages, ["As an Ironman, you cannot take part in a staked duel."]);
+  assert.equal(staker.getInventory().getAmount(995), 1000, "the coins stay in the staker's inventory");
+  assert.equal(opponent.getDueling().getState(), DuelState.CONFIRM_SCREEN);
 });
 
 test("an Ironman can't pick up other players' items; their own and world spawns are fine", () => {
