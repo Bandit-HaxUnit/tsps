@@ -17,11 +17,16 @@ require("../plugins/combat/specials/VolatileNightmareStaff.SpecialAttack")({
   core,
   registerCombatSpecial: CombatSpecial.register,
 });
+require("../plugins/combat/specials/DragonDagger.SpecialAttack")({
+  core,
+  registerCombatSpecial: CombatSpecial.register,
+});
 
 const WEAPON_ID = ItemIdentifiers.VOLATILE_NIGHTMARE_STAFF;
+const AUTOCAST = { name: "Fire Strike" };
 
-function player({ autocast = true, activated = true } = {}) {
-  const weapon = { getId: () => WEAPON_ID };
+function player({ autocast = true, activated = true, castSpell = null, weaponId = WEAPON_ID, special } = {}) {
+  const weapon = { getId: () => weaponId };
   const items = Array.from({ length: 14 }, () => ({ getId: () => -1 }));
   items[Equipment.WEAPON_SLOT] = weapon;
   const combat = {
@@ -29,8 +34,8 @@ function player({ autocast = true, activated = true } = {}) {
     setAmmunition() {},
     getRangedWeapon: () => null,
     setRangedWeapon() {},
-    getCastSpell: () => null,
-    getAutocastSpell: () => autocast ? { name: "Fire Strike" } : null,
+    getCastSpell: () => castSpell,
+    getAutocastSpell: () => autocast ? AUTOCAST : null,
     getTarget: () => null,
   };
   const p = {
@@ -39,7 +44,7 @@ function player({ autocast = true, activated = true } = {}) {
     getAsPlayer: () => p,
     getCombat: () => combat,
     getEquipment: () => ({ hasStaffEquipped: () => true, getItems: () => items, get: () => weapon }),
-    getCombatSpecial: () => CombatSpecial.getForWeaponId(WEAPON_ID),
+    getCombatSpecial: () => special === undefined ? CombatSpecial.getForWeaponId(weaponId) : special,
     isSpecialActivated: () => activated,
   };
   return p;
@@ -63,4 +68,38 @@ test("without autocast, the activated special is still selected", () => {
   const special = CombatSpecial.getForWeaponId(WEAPON_ID);
   const method = CombatFactory.getMethod(player({ autocast: false, activated: true }));
   assert.equal(method, special.getCombatMethod());
+});
+
+test("a custom resolver owns the Toxic blowpipe special before its fallback method", () => {
+  const fallback = { type: () => CombatType.RANGED };
+  const resolved = { type: () => CombatType.RANGED, resolved: true };
+  const special = { id: "toxic_blowpipe", getCombatMethod: () => fallback };
+  const p = player({
+    autocast: false,
+    activated: true,
+    weaponId: ItemIdentifiers.TOXIC_BLOWPIPE,
+    special,
+  });
+  const original = PluginManager.getCombatMethodResolvers;
+  PluginManager.getCombatMethodResolvers = () => [{
+    resolve: (attacker) => attacker === p ? resolved : null,
+  }];
+  try {
+    assert.equal(CombatFactory.getMethod(p), resolved, "the blowpipe resolver sees its own special state");
+  } finally {
+    PluginManager.getCombatMethodResolvers = original;
+  }
+});
+
+test("an explicit spell click beats an armed dragon dagger special", () => {
+  const dagger = CombatSpecial.getForWeaponId(ItemIdentifiers.DRAGON_DAGGER);
+  assert.ok(dagger, "the dragon dagger special is registered");
+  const method = CombatFactory.getMethod(player({
+    autocast: false,
+    activated: true,
+    weaponId: ItemIdentifiers.DRAGON_DAGGER,
+    special: dagger,
+    castSpell: { name: "Ice Barrage" },
+  }));
+  assert.equal(method, CombatFactory.MAGIC_COMBAT, "the requested spell, not the armed special");
 });

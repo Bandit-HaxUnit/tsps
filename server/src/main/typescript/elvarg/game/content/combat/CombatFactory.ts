@@ -135,6 +135,21 @@ export class CombatFactory {
                 player.getCombat().setRangedWeapon(resolvedWeapon);
             }
 
+            // An explicit spell click owns the action even if a weapon special is armed.
+            if (player.getCombat().getCastSpell() != null) {
+                return CombatFactory.MAGIC_COMBAT;
+            }
+
+            // A weapon's own resolver knows its special method (the Toxic blowpipe's
+            // real method, including its drain and heal), so it comes before the
+            // registered special's generic fallback method.
+            for (const resolver of PluginManager.getCombatMethodResolvers()) {
+                const resolved = resolver.resolve(attacker);
+                if (resolved) {
+                    return resolved;
+                }
+            }
+
             // An activated special owns this swing even while a spell is autocast:
             // OSRS lets the staff's special (Immolate/Invocate) override autocast.
             const special = getPlayerCombatSpecial(player);
@@ -142,18 +157,8 @@ export class CombatFactory {
                 return special.getCombatMethod();
             }
 
-            if (
-                player.getCombat().getCastSpell() != null ||
-                (player.getCombat().getAutocastSpell() != null && player.getEquipment().hasStaffEquipped())
-            ) {
+            if (player.getCombat().getAutocastSpell() != null && player.getEquipment().hasStaffEquipped()) {
                 return CombatFactory.MAGIC_COMBAT;
-            }
-
-            for (const resolver of PluginManager.getCombatMethodResolvers()) {
-                const resolved = resolver.resolve(attacker);
-                if (resolved) {
-                    return resolved;
-                }
             }
 
             if (player.getCombat().getRangedWeapon() != null) {
