@@ -67,8 +67,11 @@ export class PendingHit {
     private protectionBypassed = false;
     /** Attack kind whose protection prayer is checked when the hit lands. */
     private protectionType: CombatType;
-    /** Whether the hit-time defences have already been applied (a hit cannot land twice). */
-    private impactDefencesApplied = false;
+    /** Protection/Elysian stages already run on this hit object, so a replay cannot double them. */
+    private impactProtectionApplied = false;
+    private impactIncomingApplied = false;
+    /** A scripted producer fills this hit in manipulateHit; run Elysian/equipment after it. */
+    private incomingDamageDeferred = false;
     /** Index of the `firstSuccessfulAccuracyDamageRanges` branch that landed; -1 when every roll missed. */
     private firstSuccessfulRangeIndex: number | undefined;
 
@@ -205,12 +208,33 @@ export class PendingHit {
         return this.protectionType;
     }
 
-    public hasAppliedImpactDefences(): boolean {
-        return this.impactDefencesApplied;
+    public hasAppliedImpactProtection(): boolean {
+        return this.impactProtectionApplied;
     }
 
-    public markImpactDefencesApplied(): void {
-        this.impactDefencesApplied = true;
+    public markImpactProtectionApplied(): void {
+        this.impactProtectionApplied = true;
+    }
+
+    public hasAppliedImpactIncoming(): boolean {
+        return this.impactIncomingApplied;
+    }
+
+    public markImpactIncomingApplied(): void {
+        this.impactIncomingApplied = true;
+    }
+
+    /** Content that resolves its own scripted damage in manipulateHit defers equipment reactions. */
+    public deferIncomingDamageUntilImpact(): void {
+        this.incomingDamageDeferred = true;
+    }
+
+    public defersIncomingDamage(): boolean {
+        return this.incomingDamageDeferred;
+    }
+
+    public completeDeferredIncomingDamage(): void {
+        this.incomingDamageDeferred = false;
     }
 
     public setTotalDamage(damage: number): void {

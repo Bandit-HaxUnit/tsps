@@ -303,42 +303,87 @@ export class CombatFactory {
         if (!Array.isArray(hits) || hits.length === 0) {
             return;
         }
-        if (typeof hit.hasAppliedImpactDefences === "function" && hit.hasAppliedImpactDefences()) {
-            return;
-        }
-        if (typeof hit.markImpactDefencesApplied === "function") {
-            hit.markImpactDefencesApplied();
-        }
-
         const attacker = hit.getAttacker();
         const victim = hit.getTarget();
         if (!attacker || !victim) {
             return;
         }
 
-        const bypassProtection = typeof hit.bypassesProtectionPrayer === "function"
-            && hit.bypassesProtectionPrayer();
-        const protectionType = typeof hit.getProtectionType === "function"
-            ? hit.getProtectionType()
-            : hit.getCombatType();
-        if (!bypassProtection && protectionType !== undefined) {
-            const prayer = PrayerHandler.getProtectingPrayer(protectionType);
-            if (PrayerHandler.isActivated(victim, prayer)) {
-                const reduction = attacker.isNpc()
-                    ? CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_NPCS
-                    : CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_PLAYERS;
-                for (const damage of hits) damage.multiplyDamage(reduction);
+        const protectionApplied = typeof hit.hasAppliedImpactProtection === "function"
+            && hit.hasAppliedImpactProtection();
+        if (!protectionApplied) {
+            const bypassProtection = typeof hit.bypassesProtectionPrayer === "function"
+                && hit.bypassesProtectionPrayer();
+            const protectionType = typeof hit.getProtectionType === "function"
+                ? hit.getProtectionType()
+                : hit.getCombatType();
+            if (!bypassProtection && protectionType !== undefined) {
+                const prayer = PrayerHandler.getProtectingPrayer(protectionType);
+                if (PrayerHandler.isActivated(victim, prayer)) {
+                    const reduction = attacker.isNpc()
+                        ? CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_NPCS
+                        : CombatConstants.PRAYER_DAMAGE_REDUCTION_AGAINST_PLAYERS;
+                    for (const damage of hits) damage.multiplyDamage(reduction);
+                }
+            }
+            if (typeof hit.markImpactProtectionApplied === "function") {
+                hit.markImpactProtectionApplied();
             }
         }
 
-        // Elysian and plugin-owned reactions run in their original order: the shield
-        // first, then the additive/flat equipment reductions. A miss reacts to nothing.
+        const incomingApplied = typeof hit.hasAppliedImpactIncoming === "function"
+            && hit.hasAppliedImpactIncoming();
+        const deferred = typeof hit.defersIncomingDamage === "function" && hit.defersIncomingDamage();
+        if (!incomingApplied && !deferred) {
+            CombatFactory.applyImpactIncomingDamage(hit, hits, attacker, victim);
+            if (typeof hit.markImpactIncomingApplied === "function") {
+                hit.markImpactIncomingApplied();
+            }
+        }
+        hit.updateTotalDamage();
+    }
+
+    /**
+     * A scripted producer (Mad Angel's blows) fills the same hit in `manipulateHit`, after
+     * the protection pass. Apply Elysian/equipment then, while an absorber such as
+     * Nightmare Zone has already seen the protected hit and must not react again.
+     */
+    public static applyDeferredImpactIncoming(hit: PendingHit): void {
+        if (!hit || typeof hit.getHits !== "function") {
+            return;
+        }
+        const hits = hit.getHits();
+        if (!Array.isArray(hits) || hits.length === 0) {
+            return;
+        }
+        if (typeof hit.defersIncomingDamage !== "function" || !hit.defersIncomingDamage()) {
+            return;
+        }
+        if (typeof hit.hasAppliedImpactIncoming === "function" && hit.hasAppliedImpactIncoming()) {
+            return;
+        }
+        const attacker = hit.getAttacker();
+        const victim = hit.getTarget();
+        if (!attacker || !victim) {
+            return;
+        }
+        CombatFactory.applyImpactIncomingDamage(hit, hits, attacker, victim);
+        if (typeof hit.markImpactIncomingApplied === "function") {
+            hit.markImpactIncomingApplied();
+        }
+        if (typeof hit.completeDeferredIncomingDamage === "function") {
+            hit.completeDeferredIncomingDamage();
+        }
+        hit.updateTotalDamage();
+    }
+
+    /** Elysian first, then plugin-owned additive/flat equipment reductions. A miss reacts to nothing. */
+    private static applyImpactIncomingDamage(hit: PendingHit, hits: HitDamage[], attacker: Mobile, victim: Mobile): void {
         for (let i = 0; i < hits.length; i++) {
             if (hits[i].getDamage() <= 0) continue;
             const resolved = CombatFactory.applyIncomingHitDamage(attacker, victim, hit.getCombatType(), hits[i]);
             if (resolved !== hits[i]) hits[i] = resolved;
         }
-        hit.updateTotalDamage();
     }
 
     /** Drops a dead entity's per-cycle accuracy cache so a respawn starts from fresh levels. */
@@ -898,6 +943,9 @@ export class CombatFactory {
         if (resolvedHit !== qHit) {
             CombatFactory.applyHitTimeDefences(resolvedHit);
         }
+        // An in-place scripted producer (Mad Angel's blows) filled this hit after its
+        // protection pass; resolve the deferred equipment reactions now.
+        CombatFactory.applyDeferredImpactIncoming(resolvedHit);
 
         const method = resolvedHit.getCombatMethod();
         const combatType = resolvedHit.getCombatType();
