@@ -3,12 +3,12 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
 const { ItemIdentifiers: Items } = require("../dist/util/ItemIdentifiers");
-const QuestEquipment = require("../plugins/quests/QuestEquipment.plugin");
+const attachEquipment = require("../plugins/quests/Equipment.Quests");
 
 const WIELD = new Set([Items.DRAGON_SCIMITAR, Items.DRAGON_HALBERD]);
 const world = { pluginConfig: {}, pvpMode: false, complete: new Map(), canEquip: null };
 
-QuestEquipment.register({
+attachEquipment({
   core: {
     ItemIdentifiers: Items,
     CacheDefinitions: { getItem: (id) => ({ inventoryActions: [null, WIELD.has(id) ? "Wield" : "Wear"] }) },
@@ -36,7 +36,7 @@ function reset({ equipmentRequirements, pvpMode = false, complete = {} } = {}) {
 }
 
 test("every listed item resolves to an id", () => {
-  assert.ok(QuestEquipment._test.requirements().size > 90);
+  assert.ok(attachEquipment._test.requirements().size > 90);
 });
 
 test("a rune platebody without Dragon Slayer I is refused with live OSRS's two lines", () => {

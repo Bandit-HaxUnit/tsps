@@ -8,7 +8,7 @@
  * complete the <quest> quest first."
  *
  * world.json pluginConfig `"quests:equipment-requirements": false` disables the check;
- * it defaults to true, independently of PvP mode.
+ * it defaults to true when the Quests plugin is active, independently of PvP mode.
  *
  * Not gated:
  *  - player bots, which gear up from loadouts rather than quests;
@@ -67,11 +67,9 @@ function canEquip(event) {
   refuse(player, itemId, entry);
 }
 
-module.exports = {
-  name: "QuestEquipment",
-  register(api) {
-    pluginApi = api;
-    api.onCanEquip(canEquip);
-  },
-  _test: { canEquip, requirements },
+module.exports = function attachEquipment(api) {
+  pluginApi = api;
+  api.onCanEquip(canEquip);
 };
+
+module.exports._test = { canEquip, requirements };
