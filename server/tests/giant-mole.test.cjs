@@ -163,6 +163,25 @@ test('resurfacing restores targetability and moves to a different spot', t => {
   assert.equal(s.npc.getLocation().equals(old), false);
 });
 
+test('a spade on the mole hill digs the player into the lair', t => {
+  const s = scene(t);
+  s.p.setLocation(new core.Location(2997, 3375, 0));
+  s.hooks.onItemOnObject({ player: s.p });
+  assert.ok(s.p.getLocation().equals(new core.Location(1752, 5236, 0)), 'lands at the lair entrance');
+  assert.equal(s.p.getAnimation()?.getId(), 830, 'shared dig animation');
+});
+
+test('the rope at the mole hole climbs the player back out of the lair', t => {
+  const s = scene(t);
+  s.p.setLocation(new core.Location(1752, 5136, 0));
+  assert.equal(s.hooks.onObjectFirstClick({ player: s.p, location: new core.Location(1752, 5136, 0) }), true);
+  assert.ok(s.p.getLocation().equals(new core.Location(2984, 3314, 0)));
+  const elsewhere = new core.Location(1750, 5130, 0);
+  s.p.setLocation(elsewhere);
+  assert.equal(s.hooks.onObjectFirstClick({ player: s.p, location: new core.Location(1750, 5130, 0) }), false);
+  assert.ok(s.p.getLocation().equals(elsewhere), 'a click away from the rope leaves the player put');
+});
+
 test('the real thrall attack path can trigger a burrow after its damage lands', t => {
   const s = scene(t);
   const { ArceuusThralls } = require('../dist/game/content/combat/magic/ArceuusThralls');
