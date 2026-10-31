@@ -49,7 +49,7 @@
  * quest NPCs are per-player owner-only spawns because none exist in npc-spawns.json.
  */
 module.exports = function registerChildrenOfTheSunQuest(api) {
-  const { Location, NpcIdentifiers, ObjectIdentifiers, RegionManager } = api.core;
+  const { Location, NpcIdentifiers, ObjectIdentifiers, PathFinder, RegionManager } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
   const Scenes = createQuestScenes(api);
@@ -485,7 +485,14 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
         owner: player,
         ownerOnly: true,
       });
-      if (arriving && npc?.moveTo) npc.moveTo(new Location(spawn.to.x, spawn.to.y, 0));
+      if (!npc) continue;
+      // The scene drives this walk; without it the radius-0 wander coordinator
+      // treats the first step away from the spawn as "away" and walks back.
+      npc.setScriptedMovement?.(true);
+      // moveTo teleports (it resets the queue and moves the location immediately),
+      // so the scene would open with the delegation already in formation. Queue
+      // the collision-valid route instead; login recovery still spawns on `to`.
+      if (arriving) PathFinder.calculateWalkRoute(npc, spawn.to.x, spawn.to.y);
     }
   }
 

@@ -28,6 +28,7 @@ function harness(name, page = null, options = {}) {
   const api = new Proxy({
     core: {
       ...core,
+      PathFinder: Object.assign(Object.create(core.PathFinder), { calculateWalkRoute: (npc, x, y) => npc.getMovementQueue().addSteps?.(new core.Location(x, y, npc.getLocation().getZ())) }),
       World: { ...core.World, getNpcs: () => npcs, getNpcsNear: () => npcs, getPlayers: () => worldPlayers },
       TaskManager: {
         submit(task) { task.setRunning(true); tasks.push(task); },
@@ -57,7 +58,7 @@ function harness(name, page = null, options = {}) {
         isNpc: () => true, isPlayer: () => false,
         getAsNpc: () => npc, isRegistered: () => !npc.removed, getOwner: () => definition.owner,
         setPositionToFace: noop, forceChat: noop, performAnimation: noop, performGraphic: noop,
-        getMovementQueue: () => ({ reset() { return this; }, hasPendingWork: () => false, addFirstStep: to => { location = to; } }),
+        getMovementQueue: () => ({ reset() { return this; }, hasPendingWork: () => false, addFirstStep: to => { location = to; }, addSteps: to => { npc.walkingTo = to; } }),
         setNpcTransformationId: id => { npc.transformedId = id; }, setCombatXpMultiplier: noop,
         setHitpoints: hp => { npc.hitpoints = hp; return npc; }, getHitpoints: () => npc.hitpoints ?? 2000,
         getCombat: () => ({ reset: noop }),
