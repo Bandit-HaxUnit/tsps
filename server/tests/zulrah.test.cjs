@@ -24,7 +24,7 @@ const Shrine = require('../plugins/bosses/zulrah/Shrine.Zulrah');
 const Access = require('../plugins/bosses/zulrah/Access.Zulrah');
 const NpcDrops = require('../plugins/npcs/NpcDrops.plugin');
 
-const hooks = { objects: {}, npcs: {}, prompts: [], custom: {}, attack: [], drops: [], death: [], npcDeath: [], emitted: [] };
+const hooks = { objects: {}, npcs: {}, prompts: [], custom: {}, attack: [], drops: [], death: [], npcDeath: [], emitted: [], quests: new Set() };
 let nextIndex = 1;
 
 function fakeNpc(id, x, y) {
@@ -76,7 +76,11 @@ function fakeApi() {
     onItemAction: () => {},
     onNpcDeath: (handler) => hooks.npcDeath.push(handler),
     onCustomEvent: (name, handler) => (hooks.custom[name] ??= []).push(handler),
-    emitCustomEvent: (name, payload) => { hooks.emitted.push([name, payload]); for (const fn of hooks.custom[name] ?? []) fn(payload); },
+    emitCustomEvent: (name, payload) => {
+      if (name === 'quest:is-complete' && hooks.quests.has(payload.key)) payload.complete = true;
+      hooks.emitted.push([name, payload]);
+      for (const fn of hooks.custom[name] ?? []) fn(payload);
+    },
     onNpcDialogueCondition: (fn) => { hooks.condition = fn; },
     onNpcHitModify() {},
     onCanAttack: (handler) => hooks.attack.push(handler),
@@ -157,6 +161,8 @@ before(async () => {
   RegionManager.init();
   ObjectDefinition.init();
   require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+  // The Wiki's Regicide requirement: boarding fixtures have it done unless a test says otherwise.
+  hooks.quests.add('regicide');
   const api = fakeApi();
   Access.attach(api);
   Shrine(api);
@@ -665,6 +671,40 @@ test("access starts at 0: the boat is refused with the priestess's own transcrip
   assert.equal(start[1].variant, Access.VARIANT.priestess.board);
   assert.equal(Fight.fightOf(player) ?? null, null, 'not rowed out');
   assert.equal(Access.stageOf(player), 0);
+});
+
+test('Regicide is required too: without it the boat is refused past the High Priestess, never with the sailing transcript', () => {
+  const player = fakePlayer();
+  hooks.quests.delete('regicide');
+  try {
+    player.setAttribute('zulrah:access', 2);
+    hooks.emitted.length = 0;
+    assert.equal(Shrine.quickBoard({ player }), true);
+    let start = hooks.emitted.find(([name]) => name === 'npc-dialogue:start');
+    assert.ok(start, 'the priestess refuses');
+    assert.equal(start[1].variant, Access.VARIANT.priestess.board, 'not accepted: that transcript ends in the ritual');
+    assert.equal(Fight.fightOf(player) ?? null, null, 'not rowed out');
+
+    player.setAttribute('zulrah:access', 3);
+    hooks.emitted.length = 0;
+    Shrine.quickBoard({ player });
+    start = hooks.emitted.find(([name]) => name === 'npc-dialogue:start');
+    assert.equal(start[1].variant, Access.VARIANT.priestess.board, 'still refused past the High Priestess');
+    assert.equal(Fight.fightOf(player) ?? null, null);
+
+    // Her "Yes." menu emits the sail event directly; that must not get around the gate either.
+    player.dialogueActive = false;
+    for (const fn of hooks.custom[Access.SAIL_EVENT] ?? []) fn({ player });
+    ticks(2);
+    assert.equal(Fight.fightOf(player) ?? null, null, 'no sailing past the gate');
+  } finally {
+    hooks.quests.add('regicide');
+  }
+  Shrine.quickBoard({ player });
+  ticks(2);
+  const fight = Fight.fightOf(player);
+  assert.ok(fight, 'with Regicide the stage-3 boat sails');
+  fight.end();
 });
 
 test("the recorded lines move the stage: told 1, accepted 2, and the ritual's last line rows the player out (3)", () => {

@@ -11,6 +11,9 @@
  *   transport you to Zulrah's shrine and offer your life on behalf of our tribe.").
  * The cache's boat (Board, Quick-Board) and priestess (Collect) forms follow the varbit. The stage
  * is saved; a player who has already killed Zulrah is past it.
+ *
+ * Wiki (/w/Zulrah): Regicide must be complete (the Wiki's "to the point of reaching Port Tyras",
+ * the only way to Zul-Andra); the QuestRuntime answers quest:is-complete from its varp.
  */
 
 const Shared = require("./Shared.Zulrah");
@@ -154,11 +157,23 @@ function advanceOnChoice(event) {
   if (asked && event.option === "Yes." && stageOf(player) >= STAGE.SACRIFICED) Shared.api().emitCustomEvent(SAIL_EVENT, { player });
 }
 
-/** Boarding before the High Priestess's leave: the priestess's own transcript for it. */
+/** The Wiki's other requirement: Regicide (answered by the quest runtime from its varp). */
+function regicideComplete(player) {
+  const request = { player, key: "regicide", complete: false };
+  Shared.api().emitCustomEvent("quest:is-complete", request);
+  return request.complete === true;
+}
+
+/**
+ * Boarding before the High Priestess's leave, or without Regicide: the priestess's own
+ * transcript for it.
+ */
 function refuseBoarding(player) {
   const stage = stageOf(player);
-  if (stage >= STAGE.SACRIFICED) return false;
-  const variant = stage === STAGE.ACCEPTED ? VARIANT.priestess.accepted : VARIANT.priestess.board;
+  const regicide = regicideComplete(player);
+  if (stage >= STAGE.SACRIFICED && regicide) return false;
+  // Without Regicide even her accepted transcript would row them out, so refuse as the boat's.
+  const variant = regicide && stage === STAGE.ACCEPTED ? VARIANT.priestess.accepted : VARIANT.priestess.board;
   Shared.api().emitCustomEvent("npc-dialogue:start", { player, npcId: Shared.core().NpcIdentifiers.PRIESTESS_ZUL_GWENWYNIG, variant, exact: true, handled: false });
   return true;
 }
@@ -178,4 +193,4 @@ function attach(api) {
   api.onCustomEvent("npc-dialogue:choice", advanceOnChoice);
 }
 
-module.exports = { attach, stageOf, refuseBoarding, talkToPriestess, chooseVariant, STAGE, ACCESS_ATTRIBUTE, SAIL_EVENT, VARIANT };
+module.exports = { attach, stageOf, refuseBoarding, regicideComplete, talkToPriestess, chooseVariant, STAGE, ACCESS_ATTRIBUTE, SAIL_EVENT, VARIANT };
