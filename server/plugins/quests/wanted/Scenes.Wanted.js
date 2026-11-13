@@ -395,9 +395,11 @@ module.exports = function createWantedScenes(api, hooks) {
       });
     }
     if (table.advance !== undefined && !table.lines.includes(table.advance)) {
-      Scenes.later(state.key, table.advance, () => playing.get(player) === state && advance(player, state));
+      Scenes.later(state.key, table.advance, () => !state.cancelled && advance(player, state));
     }
-    for (const event of table.events) Scenes.later(state.key, event.t, () => playing.get(player) === state && run(player, state, event));
+    // Events run on after the last line has finished the scene (stop 6 removes Solus on its last
+    // line's tick); only an abort stops them.
+    for (const event of table.events) Scenes.later(state.key, event.t, () => !state.cancelled && run(player, state, event));
     return true;
   }
 
@@ -484,6 +486,10 @@ module.exports = function createWantedScenes(api, hooks) {
     if (!state.finished || state.done || playing.has(player)) return;
     state.done = true;
     api.core.TaskManager.cancelTasks(state.key);
+    if (state.solus) {
+      removeNpc(state.solus);
+      state.solus = null;
+    }
     if (state.position === 6) {
       // The knight comes on the continue's next tick (capture ticks 3978-3979).
       Scenes.later(player, 1, () => summonKnight(player, state));
@@ -725,6 +731,7 @@ module.exports = function createWantedScenes(api, hooks) {
     // The finale's instance ends itself on a logout or a death (finaleEnded).
     if (state.finale) return;
     playing.delete(player);
+    state.cancelled = true;
     api.core.TaskManager.cancelTasks(state.key);
     if (state.solus) removeNpc(state.solus);
     if (state.advanced || state.clued) {

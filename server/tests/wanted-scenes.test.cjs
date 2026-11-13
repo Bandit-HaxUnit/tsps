@@ -144,13 +144,13 @@ test("Canifis: Solus appears, lines are held, the varbits move at Argh! and the 
 });
 
 test("Solus appears at the captured offset from where the player scans, not on one fixed tile", (t) => {
-  // Older Canifis recordings scanned from 3487,3482 and 3485,3481 (rsprox 229/02617, 231/00365).
+  // The scan tile of rsprox 231/00365; live put Solus +1,+3 there. Ours applies this run's offset.
   const { player } = actor(t, [3485, 3481], { position: 1, destination: 1, pending: 6 });
   scan(player);
   tick(2);
   const solus = owned(player, 4939);
   assert.ok(solus, "wanted_solus1 (4939) appears");
-  assert.deepEqual([solus.getLocation().getX(), solus.getLocation().getY()], [3485, 3477], "four south, as captured");
+  assert.deepEqual([solus.getLocation().getX(), solus.getLocation().getY()], [3485, 3477], "this run's offset (+0,-4) from another tile (ours)");
 });
 
 test("the fourth stop: Flames of Zamorak take 69 HP to 10, never below 1, and Savant wakes the player outside Falador Castle", (t) => {
@@ -175,9 +175,12 @@ test("the fourth stop: Flames of Zamorak take 69 HP to 10, never below 1, and Sa
 
 test("the sixth stop: the knight comes on the continue, and its death hands over 20 noted pure essence", (t) => {
   const { player, log } = actor(t, [2551, 3082], { position: 6, destination: 18 });
+  const resets = t.mock.method(player.getPacketSender(), "sendCameraReset");
   scan(player);
   tick(ScenesModule.POSITION_SCENES[6].off);
   assert.equal(log.lines.at(-1).text, "Say hello to my little friend! And goodbye to me!");
+  assert.equal(owned(player, 4956), null, "Solus (wanted_solus18) leaves on the last line's tick, as captured (+25)");
+  assert.ok(resets.mock.callCount() >= 1, "the camera resets with him");
   assert.equal(owned(player, 4959), null, "no knight before the continue");
   player.getDialogueManager().advance();
   tick(1);
