@@ -300,6 +300,11 @@ function withdrawAll({ player }) {
   }
 }
 
+/** Quick-withdraw: Withdraw-all without opening the storage, after the Bank PIN. */
+function quickWithdraw(event) {
+  if (unlocked(event, quickWithdraw)) withdrawAll(event);
+}
+
 function storeAll(player) {
   for (const kind of KINDS) store(player, kind, CAPACITY[kind]);
 }
@@ -368,12 +373,7 @@ function register(pluginApi) {
   init(pluginApi);
   for (const key of Object.values(STORAGE_ATTRIBUTE)) pluginApi.persistAttribute(key, 0);
   pluginApi.persistAttribute(QUANTITY_ATTRIBUTE, 0);
-  pluginApi.onNpcInteraction("Elnock Inquisitor", {
-    Exchange: open,
-    "Quick-withdraw": function quickWithdraw(event) {
-      if (unlocked(event, quickWithdraw)) withdrawAll(event);
-    },
-  });
+  pluginApi.onNpcInteraction("Elnock Inquisitor", { Exchange: open, "Quick-withdraw": quickWithdraw });
   pluginApi.onInterfaceActionClick(click);
   pluginApi.onCustomEvent("interface:closed", closed);
 }
