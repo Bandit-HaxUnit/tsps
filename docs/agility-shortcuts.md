@@ -52,14 +52,13 @@ and say what is still a guess in `unverified`.
 | Grapple walls (Falador, Yanille) | rev 237 (the newest): fire and climb in one animation (1779) with its graphic (3575) and sound 2928, a screen fade, the teleport onto the wall 7 ticks in (rev 230 took 10, with 4455/760). The fade isn't sent yet |
 | Pillar (Ruins of Mokhaiotl) | a 3-tile jump (12196) in 27 cycles, sound 2461; a tick later varbit 16716 (`moki_agil_shortcut_side`) flips, so only the far pillar shows "Jump-to" (the runner's `varbit` step) |
 | Gaps (Chasm of Fire) | two gaps (event-world recordings): the west one a 6-tile jump (12196, sound 2461) from 1440,10098 to 1446,10097; the east one two hops a tick apart, onto 1453 then 1456. The exact moves are drawn a tile or two short of the server position; the entries land where the server puts the player. The way back mirrors it |
+| Mysterious pipe (Karuulm Slayer Dungeon) | rsprox captures 1521, 2952, 4001 (rev 224-237), all west to east, the player arriving on 1316,10213 south of the pipe: +1 faces it; +2 reach animation 833 (delay 10), BUSY on, the screen fades out (948, 50 cycles) and "You start the mediocre lengthed journey of clambering into the pipe..." in a message box with no continue; +3 the minimap off (6719 = 2) and "You push your body down further into the pipe..."; +5 on 1346,10232, same facing, minimap on; +6 the fade in and "You see light from above, and start to climb upwards and out of the pipe system." with a continue, which closes the box and the overlay and clears BUSY. No XP (Wiki). East to west mirrors it (not recorded). Script `karuulmPipe` (KaruulmPipe.Agility.js) |
 
 ## Still unverified, with what the captures show
 
 - **Broken Raft, Crossbow Tree:** grapple, the rope added as scenery, the side panels hidden, a
   swim along the rope (their own swimming animations) and a chance the grapple breaks. Needs its
   own script.
-- **Mysterious pipe (Mount Karuulm):** its messages are chatbox message boxes and the minimap is
-  hidden, which the step format can't express yet.
 - **Wall (Darkmeyer):** recorded climbing up (39173, `human_reachforladder`, then a teleport to
   3595,3312 a tick later), but that half is on plane 1 and the other (39172) on plane 0; where the
   player stands needs another look. Not added.
