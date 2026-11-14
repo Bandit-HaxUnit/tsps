@@ -1,7 +1,8 @@
 /**
  * Read on the non-quest books that open in the two-page book viewer (392): the Construction
- * guide, the Glassblowing book (with its item pictures) and the Archaeologist's diary.
- * Reading changes nothing in the inventory.
+ * guide, the Glassblowing book (with its item pictures), the Archaeologist's diary and the
+ * Journal page from the Icyene Graveyard's mud mound (rsprox 231/00392 ticks 8232, 8280: one
+ * spread, both page buttons hidden). Reading changes nothing in the inventory.
  */
 const { openBook, bookPagesFromSpreads, registerQuestWidgets } = require("../quests/QuestRuntime");
 const books = require("./data/reading-books.json");
@@ -12,7 +13,7 @@ const READING_BOOKS = Object.entries(books)
 
 module.exports = {
   name: "ReadingBooks",
-  description: "Lets players read the Construction guide, the Glassblowing book and the Archaeologist's diary in the book viewer.",
+  description: "Lets players read the Construction guide, the Glassblowing book, the Archaeologist's diary and the mud mound's Journal page in the book viewer.",
   members: true,
   READING_BOOKS,
   register(api) {
