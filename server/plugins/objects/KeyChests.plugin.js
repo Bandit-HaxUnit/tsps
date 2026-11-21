@@ -3,8 +3,8 @@
 /**
  * Chests opened with a key (docs/key-chests.md): the crystal chest in Taverley, the brimstone
  * chest on Mount Karuulm, Larran's small and big chests in the Wilderness, the Elven Crystal
- * Chest in Prifddinas, the Grubby Chest and the Zombie Pirate's Locker; joining the crystal key
- * halves and singing the enhanced crystal key.
+ * Chest in Prifddinas, the Grubby Chest, the Zombie Pirate's Locker and the Ruins of Tapoyauik
+ * moon key chest; joining the crystal and moon key halves and singing the enhanced crystal key.
  * Units in ./keychests/.
  */
 const UNITS = [
