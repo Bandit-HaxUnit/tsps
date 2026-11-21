@@ -89,8 +89,8 @@ function clip(event) {
     player.performAnimation(new Animation(PRUNING));
     player.getPacketSender().sendSound(CLIP_SOUND, 0, 0);
     TaskManager.submit(new CountdownTask(player, SHAPE_DELAY_TICKS, () => {
-      player.performAnimation(new Animation(-1));
       if (House.houseFor(player) !== house) return;
+      player.performAnimation(new Animation(-1));
       if (shape === PLAIN) delete furniture.displayObjectId;
       else furniture.displayObjectId = shape.loc;
       House.saveHouse(house);
