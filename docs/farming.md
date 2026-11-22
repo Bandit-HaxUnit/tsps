@@ -91,11 +91,13 @@ Pay (and Pay (north) ...) makes the protection offer below straight away. Talk-t
       index). "Don't ask again" turns the confirmation off once the deal is done. If the payment has left the
       inventory by then, the answer is "I'm afraid I don't have any of those at the moment." / "Well, I'm not
       wasting my time for free.".
-    - **Recorded difference:** Aub says "That'll do nicely, <player name>." (1001562). The server follows the Wiki's
-      sir/madam.
+    - **Recorded difference:** Aub says "That'll do nicely, iknami." (1001562), the Varlamore form of address. His
+      Wiki page, and the server, say sir/madam.
     - **Whose patches:** a Farming Guild gardener whose Pay option names its patch ("Pay (Redwood tree)") looks after
-      that patch type only. Any other patch belongs to the nearest gardener who could look after it, so Alan, Nikkie,
-      Taylor, Alexandra and each Fossil Island squirrel keep to their own.
+      that patch type only. The guild's Alan looks after his Wiki patches, "The Cactus Patch|The Northern Allotment
+      Patch|The Southern Allotment Patch|The Bush Patch" (Wiki, Alan (Farming Guild)), though the cactus is 13 tiles
+      from him. Any other patch belongs to the nearest gardener who could look after it, so Nikkie, Taylor,
+      Alexandra and each Fossil Island squirrel keep to their own.
     - **Wiki answers** (Transcript:Kragen, Transcript:Fayeth): "No, that's too much." and an empty inventory give
       "Well, I'm not wasting my time for free.", after "I'm afraid I don't have any (enough) of those at the
       moment." when the player has none (or not enough). Other states have their own lines:

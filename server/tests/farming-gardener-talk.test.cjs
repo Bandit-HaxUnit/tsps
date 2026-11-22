@@ -22,7 +22,7 @@ const SELL_REPLY = "That depends on whether I have it to sell. What is it that y
 
 let N;
 before(async () => {
-  await h.setup([[3193, 3233], [3055, 3305], [1235, 3752]]);
+  await h.setup([[3193, 3233], [3055, 3305], [1235, 3752], [1265, 3734]]);
   // The game builder's shops, which the harness does not load: shops.json and the plugins' own.
   new ShopDefinitionLoader().load();
   ShopManager.initialize();
@@ -234,4 +234,33 @@ test("a deal whose payment left at the menu: the Wiki's no-payment answer, nothi
   assert.deepEqual(said.slice(-2), ["PLAYER: I'm afraid I don't have any of those at the moment.", "Fayeth: Well, I'm not wasting my time for free."]);
   assert.equal(state.protected, false);
   assert.notEqual(f.player.getPacketSender().getVarbit(98), 1);
+});
+
+test("Farming Guild: Alan looks after the cactus 13 tiles away, by Pay and by his Wiki 'which one' menu (Alan (Farming Guild))", async (t) => {
+  const f = h.actor(t, { at: [1264, 3735, 0], stage: 100, farming: 99 });
+  const cactus = guildPatch(1264, 3747);
+  assert.equal(cactus?.type, "CACTUS");
+  Object.assign(Patches.stateFor(f.player, cactus), { crop: "CACTUS", status: "growing", stage: 1, protected: false });
+  const [berries, count] = Data.CROPS.get("CACTUS").payment[0];
+  f.player.getInventory().add(new h.core.Item(berries, count), false);
+  const alan = h.spawn(f, 8535, [1265, 3734, 0]);
+  const latlink = h.spawn(f, 8537, [1254, 3752, 0]);
+  await h.talk(f, alan, 3);
+  const offer = f.player.getDialogueManager().getCurrent();
+  assert.equal(offer?.getTitle?.(), "Pay 6 cadava berries?", JSON.stringify(f.said));
+  f.player.getDialogueManager().reset();
+  f.player.getPacketSender().sendInterfaceRemoval();
+  h.tick(f);
+  const said = await h.converse(f, () => h.talk(f, alan), ["Would you look after my crops for me?", "The Cactus Patch"]);
+  assert.deepEqual(said.slice(1, 5), ["PLAYER: Would you look after my crops for me?", "Alan: I might - which one were you thinking of?",
+    "MENU[Select an option]: The Cactus Patch|The Northern Allotment Patch|The Southern Allotment Patch|The Bush Patch",
+    "Alan: If you like, but I want 6 cadava berries for that."], JSON.stringify(said));
+  // Latlink, 10 tiles from the cactus, keeps to his spirit tree (Pay (Spirit tree)): no cactus offer from him.
+  f.player.getDialogueManager().reset();
+  f.player.getPacketSender().sendInterfaceRemoval();
+  h.tick(f);
+  f.player.moveTo(new h.core.Location(1254, 3751, 0));
+  await h.talk(f, latlink, 3);
+  assert.notEqual(f.player.getDialogueManager().getCurrent()?.getTitle?.(), "Pay 6 cadava berries?");
+  assert.equal(h.shown(f)?.text, NO_SAPLING);
 });

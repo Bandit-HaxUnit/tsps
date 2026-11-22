@@ -739,9 +739,23 @@ const withinRange = (npc, p) => {
     const pos = npc.getLocation();
     return p.z === pos.getZ() && Math.abs(p.x - pos.getX()) <= GARDENER_RANGE && Math.abs(p.y - pos.getY()) <= GARDENER_RANGE;
 };
+/**
+ * Gardeners whose patches are not all within reach, by NPC id, with the names their "which one" menu gives: the
+ * Farming Guild's Alan stands 13 tiles from his cactus (Wiki: "Alan (Farming Guild)" transcript, and the Cactus seed
+ * page, "Ayesha ... or Alan in the Farming Guild will look after your growing cactus").
+ */
+const OWN_PATCHES = {
+    8535: [["1264,3747", "The Cactus Patch"], ["1267,3732", "The Northern Allotment Patch"],
+        ["1267,3723", "The Southern Allotment Patch"], ["1260,3733", "The Bush Patch"]],
+};
+const tileOf = p => `${p.x},${p.y}`;
+const OWNED_TILES = new Set(Object.values(OWN_PATCHES).flat().map(([tile]) => tile));
+const ownList = npc => OWN_PATCHES[npc?.getId?.()];
 /** Could `npc` look after `p`: a gardener (a Pay option) near it, whose named patch types (if any) include it. */
 function couldGarden(npc, p, definition) {
-    if (!actionsOf(npc, definition).some(isGardenerPayment) || !withinRange(npc, p)) return false;
+    const own = ownList(npc);
+    if (own) return own.some(([tile]) => tile === tileOf(p)) && p.z === npc.getLocation().getZ();
+    if (OWNED_TILES.has(tileOf(p)) || !withinRange(npc, p) || !actionsOf(npc, definition).some(isGardenerPayment)) return false;
     const named = namedPatchTypes(npc, definition);
     return !named.length || named.includes(p.type);
 }
@@ -754,6 +768,7 @@ const distance = (npc, p) => Math.hypot(p.x - npc.getLocation().getX(), p.y - np
  */
 function gardenedPatches(player, npc, definition) {
     const near = Data.CACHE.patches.filter(p => isGardened(p.type) && couldGarden(npc, p, definition));
+    if (ownList(npc)) return ownList(npc).map(([tile]) => near.find(p => tileOf(p) === tile)).filter(Boolean);
     if (namedPatchTypes(npc, definition).length) return near;
     const others = [];
     for (const other of core.World.getNpcs()) if (other && other !== npc && other.getId?.() !== npc.getId() && other.getHitpoints?.() > 0) others.push(other);
@@ -774,6 +789,8 @@ const COMPASS = { north: "northern", south: "southern", east: "eastern", west: "
 function patchLabels(npc, patches, definition) {
     const directions = actionsOf(npc, definition)
         .map(action => /^pay \((.+)\)$/i.exec(action ?? "")?.[1]?.toLowerCase()).filter(Boolean);
+    const own = ownList(npc);
+    if (own) return patches.map(p => [own.find(([tile]) => tile === tileOf(p))[1], p]);
     const noun = p => p.type === "ALLOTMENT" ? "allotment" : `${p.type.toLowerCase().replace(/_/g, " ")} patch`;
     if (directions.length !== patches.length || directions.some(d => !COMPASS[d])) return patches.map(p => [`The ${noun(p)}`, p]);
     const left = [...patches];

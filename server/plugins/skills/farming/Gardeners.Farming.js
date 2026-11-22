@@ -48,7 +48,8 @@ function findOption(steps, text) {
 
 function pageSteps(page) {
     const variants = QuestRuntime.loadTranscripts(api)?.[page]?.variants;
-    return variants?.["standard-dialogue"] ?? null;
+    // Latlink Fastbell's transcript is the page's only variant, "dialogue".
+    return variants?.["standard-dialogue"] ?? variants?.dialogue ?? null;
 }
 
 /** The gardener's own random tip, else the shared one; a tip that has no random draw is not a tip. */
